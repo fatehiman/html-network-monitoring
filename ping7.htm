@@ -6,84 +6,87 @@
 <title>HTTPS Response Time Monitor</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',system-ui,sans-serif;padding:20px;min-height:100vh}
-  h1{font-size:1.4rem;font-weight:600;color:#fff;margin-bottom:4px}
-  .subtitle{font-size:.8rem;color:#576574;margin-bottom:18px}
-  .top-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:18px}
-  .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-  .controls label{font-size:.75rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
-  .controls input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:6px 10px;border-radius:6px;font-size:.85rem;width:280px;outline:none}
+  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',system-ui,sans-serif;padding:12px 20px;min-height:100vh}
+  h1{font-size:1.2rem;font-weight:600;color:#fff;margin-bottom:0}
+  .top-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .top-left{display:flex;flex-direction:column;gap:6px}
+  .header-line{display:flex;align-items:center;gap:16px}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .controls label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .controls input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:6px;font-size:.82rem;width:280px;outline:none}
   .controls input:focus{border-color:#4a90d9}
-  .btn{padding:6px 18px;border:none;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .15s}
-  .btn-toggle{background:#2d3748;color:#fff;min-width:38px;font-size:1rem;padding:6px 10px}
+  .btn{padding:4px 14px;border:none;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .15s}
+  .btn-toggle{background:#2d3748;color:#fff;min-width:34px;font-size:.95rem;padding:4px 8px}
   .btn-toggle:hover{background:#4a5568}
   .btn-clear{background:#2d3748;color:#8395a7}.btn-clear:hover{background:#4a5568;color:#fff}
-  .range-select{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:6px 10px;border-radius:6px;font-size:.82rem;outline:none;cursor:pointer;min-width:220px}
+  .range-select{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:6px;font-size:.8rem;outline:none;cursor:pointer;min-width:210px}
   .range-select:focus{border-color:#4a90d9}
   .range-select option{background:#141a2a;color:#fff}
-  .stats{display:flex;gap:16px;margin-bottom:18px;flex-wrap:wrap}
-  .stat{background:#141a2a;border:1px solid #2d3748;border-radius:8px;padding:10px 16px;min-width:120px}
-  .stat .label{font-size:.65rem;text-transform:uppercase;letter-spacing:.5px;color:#576574;margin-bottom:2px}
-  .stat .value{font-size:1.3rem;font-weight:700;color:#fff}
+  .stats{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .stat{background:#141a2a;border:1px solid #2d3748;border-radius:6px;padding:4px 10px;min-width:90px}
+  .stat .label{font-size:.55rem;text-transform:uppercase;letter-spacing:.5px;color:#576574;margin-bottom:1px}
+  .stat .value{font-size:.95rem;font-weight:700;color:#fff}
   .stat .value.good{color:#2ecc71}.stat .value.warn{color:#f39c12}.stat .value.bad{color:#e74c3c}
-  .chart-wrap{background:#141a2a;border:1px solid #2d3748;border-radius:10px;padding:16px;position:relative}
-  .tag-strip{position:relative;height:24px;margin-bottom:4px;overflow:hidden}
-  .tag-bar{position:absolute;top:0;height:22px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:600;color:#fff;overflow:hidden;white-space:nowrap;cursor:default;user-select:none;text-shadow:0 0 2px rgba(0,0,0,.5)}
+  .chart-wrap{background:#141a2a;border:1px solid #2d3748;border-radius:10px;padding:8px 16px 6px;position:relative}
+  .tag-strip{position:relative;height:20px;margin-bottom:2px;overflow:hidden}
+  .tag-bar{position:absolute;top:0;height:18px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:600;color:#fff;overflow:hidden;white-space:nowrap;cursor:default;user-select:none;text-shadow:0 0 2px rgba(0,0,0,.5)}
   canvas{width:100%!important;display:block}
-  .log{margin-top:16px;background:#141a2a;border:1px solid #2d3748;border-radius:10px;padding:12px;max-height:160px;overflow-y:auto;font-family:'Cascadia Code',monospace;font-size:.72rem;line-height:1.6}
+  .log{margin-top:10px;background:#141a2a;border:1px solid #2d3748;border-radius:10px;padding:8px 12px;max-height:120px;overflow-y:auto;font-family:'Cascadia Code',monospace;font-size:.7rem;line-height:1.55}
   .log-entry{color:#576574}.log-entry .time{color:#4a90d9}.log-entry .ms{color:#2ecc71}.log-entry .err{color:#e74c3c}
-  .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}
   .status-dot.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}.status-dot.off{background:#576574}
-  .mute-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
-  .mute-label{font-size:.75rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
-  .switch{position:relative;width:36px;height:20px;background:#2d3748;border-radius:10px;transition:background .2s}
+  .mute-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+  .mute-label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .switch{position:relative;width:34px;height:18px;background:#2d3748;border-radius:9px;transition:background .2s}
   .switch.on{background:#27ae60}
-  .switch .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:left .2s}
+  .switch .knob{position:absolute;top:2px;left:2px;width:14px;height:14px;background:#fff;border-radius:50%;transition:left .2s}
   .switch.on .knob{left:18px}
-  .range-row{display:flex;align-items:center;gap:8px}
-  .range-row label{font-size:.75rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
-  .tag-controls{display:flex;align-items:center;gap:6px}
-  .tag-controls label{font-size:.75rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
-  .tag-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:5px 8px;border-radius:6px;font-size:.82rem;width:130px;outline:none}
+  .range-row{display:flex;align-items:center;gap:6px}
+  .range-row label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+  .tag-controls{display:flex;align-items:center;gap:5px}
+  .tag-controls label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .tag-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.8rem;width:120px;outline:none}
   .tag-input:focus{border-color:#4a90d9}
-  .btn-tag{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:.9rem;transition:all .15s}
+  .btn-tag{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.85rem;transition:all .15s}
   .btn-tag:hover{background:#4a5568;color:#fff}
-  .speed-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-  .speed-row label{font-size:.75rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
-  .speed-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:5px 8px;border-radius:6px;font-size:.82rem;width:50px;outline:none;text-align:center}
+  .speed-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .speed-row label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+  .speed-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.8rem;width:46px;outline:none;text-align:center}
   .speed-input:focus{border-color:#4a90d9}
-  .btn-speed{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:.72rem;font-weight:600;transition:all .15s;white-space:nowrap}
+  .btn-speed{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.7rem;font-weight:600;transition:all .15s;white-space:nowrap}
   .btn-speed:hover{background:#4a5568;color:#fff}
   .btn-speed:disabled{opacity:.4;cursor:not-allowed}
   .btn-speed.testing{background:#4a90d9;color:#fff}
-  .speed-unit{font-size:.65rem;color:#576574}
+  .speed-unit{font-size:.6rem;color:#576574}
 </style>
 </head>
 <body>
 
-<h1>📡 HTTPS Response Time Monitor</h1>
-<p class="subtitle">Measures round-trip time using no-cors fetch — immune to CORS restrictions</p>
-
 <div class="top-row">
-  <div class="controls">
-    <div>
-      <label>Target URL</label><br>
-      <input type="text" id="urlInput" value="https://clients3.google.com/generate_204?r={rnd}" spellcheck="false">
+  <div class="top-left">
+    <div class="header-line">
+      <h1>📡 HTTPS Response Time Monitor</h1>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-toggle" id="toggleBtn" onclick="toggleMonitor()" title="Pause/Resume">⏸</button>
+        <button class="btn btn-clear" onclick="clearAllData()">Clear</button>
+        <div class="mute-toggle" onclick="toggleMute()">
+          <div class="switch" id="muteSwitch"><div class="knob"></div></div>
+          <span class="mute-label" id="muteLabel">🔇 Muted</span>
+        </div>
+      </div>
     </div>
-    <div>
-      <label>Interval (sec)</label><br>
-      <input type="number" id="intervalInput" value="3" min="1" max="300" style="width:70px">
-    </div>
-    <div style="align-self:flex-end;display:flex;gap:6px;align-items:center">
-      <button class="btn btn-toggle" id="toggleBtn" onclick="toggleMonitor()" title="Pause/Resume">⏸</button>
-      <button class="btn btn-clear" onclick="clearAllData()">Clear</button>
-      <div class="mute-toggle" onclick="toggleMute()">
-        <div class="switch" id="muteSwitch"><div class="knob"></div></div>
-        <span class="mute-label" id="muteLabel">🔇 Muted</span>
+    <div class="controls">
+      <div>
+        <label>Target URL</label><br>
+        <input type="text" id="urlInput" value="https://clients3.google.com/generate_204?r={rnd}" spellcheck="false">
+      </div>
+      <div>
+        <label>Interval (sec)</label><br>
+        <input type="number" id="intervalInput" value="3" min="1" max="300" style="width:60px">
       </div>
     </div>
   </div>
-  <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+  <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
     <div class="range-row">
       <label>Range</label>
       <select class="range-select" id="rangeSelect" onchange="onRangeChange()"></select>
@@ -132,11 +135,11 @@ const MAX_AGE_DAYS = 10;
 const MAX_RANGES = 120;
 const MIN_ACTIVE_TAG_PX = 60;
 const MIN_CLOSED_TAG_PX = 5;
-const SPEED_TEST_BYTES = 5 * 1024 * 1024; // 5MB
-const CHART_H = 400;
+const SPEED_TEST_BYTES = 5 * 1024 * 1024;
+const CHART_H = 320;
 const DL_ROW_H = 16;
 const UL_ROW_H = 16;
-const SPEED_GAP = 4;
+const SPEED_GAP = 2;
 const TOTAL_CANVAS_H = CHART_H + SPEED_GAP + DL_ROW_H + UL_ROW_H;
 
 // ===================== CONFIG STORAGE =====================
@@ -153,7 +156,6 @@ function loadConfig() {
     const raw = localStorage.getItem(CONFIG_KEY);
     if (!raw) return { ...DEFAULT_CONFIG };
     const parsed = JSON.parse(raw);
-    // Validate each field type to prevent corrupted config from crashing
     return {
       url: typeof parsed.url === 'string' ? parsed.url : DEFAULT_CONFIG.url,
       interval: typeof parsed.interval === 'number' ? parsed.interval : DEFAULT_CONFIG.interval,
@@ -161,7 +163,6 @@ function loadConfig() {
       ulInterval: typeof parsed.ulInterval === 'number' ? parsed.ulInterval : DEFAULT_CONFIG.ulInterval
     };
   } catch(e) {
-    // If config is corrupted, remove it and return defaults
     try { localStorage.removeItem(CONFIG_KEY); } catch(e2) {}
     return { ...DEFAULT_CONFIG };
   }
@@ -246,7 +247,6 @@ function saveTags(rk,t){try{localStorage.setItem(TAG_PREFIX+rk,JSON.stringify(t)
 function deleteTags(rk){localStorage.removeItem(TAG_PREFIX+rk);}
 
 // ===================== SPEED STORAGE =====================
-// [{time(ms), type:'dl'|'ul', mbps:number}]
 function loadSpeed(rk){try{const r=localStorage.getItem(SPEED_PREFIX+rk);return r?JSON.parse(r):[];}catch(e){return[];}}
 function saveSpeed(rk,d){try{localStorage.setItem(SPEED_PREFIX+rk,JSON.stringify(d));}catch(e){}}
 function deleteSpeed(rk){localStorage.removeItem(SPEED_PREFIX+rk);}
@@ -255,7 +255,6 @@ function addSpeedResult(type, mbps) {
   const now = Date.now();
   const rk = getCurrentRangeKey();
   const data = loadSpeed(rk);
-  // Remove previous result of same type if within 60s
   const filtered = data.filter(d => !(d.type === type && now - d.time < 60000));
   filtered.push({time: now, type: type, mbps: mbps});
   saveSpeed(rk, filtered);
@@ -315,7 +314,6 @@ async function testUpload() {
 function manualDL() { testDownload(); }
 function manualUL() { testUpload(); }
 
-// Auto speed test scheduling — sequential, never overlapping
 let speedQueue = [];
 let speedQueueRunning = false;
 
@@ -445,7 +443,7 @@ window.addEventListener('resize', resizeCanvas);
 
 function drawChart() {
   const W = canvas.width / (window.devicePixelRatio||1);
-  const pad = {top:20, right:20, bottom:40, left:60};
+  const pad = {top:16, right:20, bottom:24, left:60};
   const cw = W - pad.left - pad.right;
   const ch = CHART_H - pad.top - pad.bottom;
   ctx.clearRect(0,0,W,TOTAL_CANVAS_H);
@@ -462,9 +460,8 @@ function drawChart() {
   ctx.textAlign='center';ctx.textBaseline='top';
   const xInt=10*60*1000;
   const firstTick=Math.ceil(tStart.getTime()/xInt)*xInt;
-  for(let t=firstTick;t<=tEnd.getTime();t+=xInt){const x=pad.left+((t-tStart.getTime())/RANGE_MS)*cw;ctx.beginPath();ctx.moveTo(x,pad.top);ctx.lineTo(x,pad.top+ch);ctx.stroke();ctx.fillText(fmtTime(new Date(t)),x,pad.top+ch+6);}
+  for(let t=firstTick;t<=tEnd.getTime();t+=xInt){const x=pad.left+((t-tStart.getTime())/RANGE_MS)*cw;ctx.beginPath();ctx.moveTo(x,pad.top);ctx.lineTo(x,pad.top+ch);ctx.stroke();ctx.fillText(fmtTime(new Date(t)),x,pad.top+ch+4);}
   ctx.fillStyle='#8395a7';ctx.font='11px system-ui';ctx.textAlign='center';
-  ctx.fillText('Time',pad.left+cw/2,CHART_H-4);
   ctx.save();ctx.translate(12,pad.top+ch/2);ctx.rotate(-Math.PI/2);ctx.fillText('Response Time',0,0);ctx.restore();
 
   // Data
@@ -493,15 +490,12 @@ function drawChart() {
   const dlResults = speedData.filter(d => d.type === 'dl');
   const ulResults = speedData.filter(d => d.type === 'ul');
 
-  // DL row
   ctx.font = '9px system-ui';
   ctx.textBaseline = 'top';
-  // Row label
   ctx.fillStyle = '#4a90d9';
   ctx.textAlign = 'right';
   ctx.fillText('DL', pad.left - 6, speedY);
 
-  // DL line
   ctx.strokeStyle = '#1e2a3a'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(pad.left, speedY + DL_ROW_H/2); ctx.lineTo(pad.left+cw, speedY + DL_ROW_H/2); ctx.stroke();
 
@@ -512,7 +506,6 @@ function drawChart() {
     ctx.fillText(r.mbps > 0 ? r.mbps + '' : '✗', x, speedY + 1);
   }
 
-  // UL row
   const ulY = speedY + DL_ROW_H;
   ctx.fillStyle = '#a29bfe';
   ctx.textAlign = 'right';
@@ -529,7 +522,7 @@ function drawChart() {
   }
 }
 
-function fmtTime(d) { return d.toTimeString().slice(0,8); }
+function fmtTime(d) { return pad2(d.getHours())+':'+pad2(d.getMinutes()); }
 
 // ===================== STATS =====================
 function updateStatsFromViewing() {
@@ -645,11 +638,9 @@ function clearAllData(){
 // ===================== INIT =====================
 function init(){
   try {
-    // Load and apply saved config BEFORE attaching listeners
     const cfg = loadConfig();
     applyConfig(cfg);
 
-    // Save config on URL and interval changes — attach AFTER applyConfig
     document.getElementById('urlInput').addEventListener('input', saveConfig);
     document.getElementById('urlInput').addEventListener('change', saveConfig);
     document.getElementById('intervalInput').addEventListener('input', saveConfig);
