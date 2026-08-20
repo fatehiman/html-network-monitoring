@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTPS Response Time Monitor</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{height:100%}
+  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',system-ui,sans-serif;padding:12px 20px;height:100%;overflow:auto}
+  h1{font-size:1.2rem;font-weight:600;color:#fff;margin-bottom:0}
+  .top-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .top-left{display:flex;flex-direction:column;gap:6px}
+  .header-line{display:flex;align-items:center;gap:16px}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .controls label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .controls input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:6px;font-size:.82rem;width:280px;outline:none}
+  .controls input:focus{border-color:#4a90d9}
+  .btn{padding:4px 14px;border:none;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .15s}
+  .btn-toggle{background:#2d3748;color:#fff;min-width:34px;font-size:.95rem;padding:4px 8px}
+  .btn-toggle:hover{background:#4a5568}
+  .btn-clear{background:#2d3748;color:#8395a7}.btn-clear:hover{background:#4a5568;color:#fff}
+  .range-select{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:6px;font-size:.8rem;outline:none;cursor:pointer;min-width:210px}
+  .range-select:focus{border-color:#4a90d9}
+  .range-select option{background:#141a2a;color:#fff}
+  .stats{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .stat{background:#141a2a;border:1px solid #2d3748;border-radius:6px;padding:4px 10px;min-width:90px}
+  .stat .label{font-size:.55rem;text-transform:uppercase;letter-spacing:.5px;color:#576574;margin-bottom:1px}
+  .stat .value{font-size:.95rem;font-weight:700;color:#fff}
+  .stat .value.good{color:#2ecc71}.stat .value.warn{color:#f39c12}.stat .value.bad{color:#e74c3c}
+  .chart-wrap{background:#141a2a;border:1px solid #2d3748;border-radius:10px;padding:8px 16px 6px;position:relative}
+  .tag-strip{position:relative;height:20px;margin-bottom:2px;overflow:hidden}
+  .tag-bar{position:absolute;top:0;height:18px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:600;color:#fff;overflow:hidden;white-space:nowrap;cursor:default;user-select:none;text-shadow:0 0 2px rgba(0,0,0,.5)}
+  canvas{width:100%!important;display:block}
+  .log{margin-top:10px;background:#141a2a;border:1px solid #2d3748;border-radius:10px;padding:8px 12px;min-height:120px;overflow-y:auto;font-family:'Cascadia Code',monospace;font-size:.7rem;line-height:1.55}
+  .log-entry{color:#576574}.log-entry .time{color:#4a90d9}.log-entry .ms{color:#2ecc71}.log-entry .err{color:#e74c3c}
+  .status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}
+  .status-dot.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}.status-dot.off{background:#576574}
+  .sound-toggle{display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
+  .sound-label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .sound-btn{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:.68rem;font-weight:600;transition:all .15s;white-space:nowrap}
+  .sound-btn:hover{background:#4a5568;color:#fff}
+  .sound-btn.active-on{background:#27ae60;color:#fff}
+  .sound-btn.active-err{background:#e67e22;color:#fff}
+  .range-row{display:flex;align-items:center;gap:6px}
+  .range-row label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+  .tag-controls{display:flex;align-items:center;gap:5px}
+  .tag-controls label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .tag-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.8rem;width:120px;outline:none}
+  .tag-input:focus{border-color:#4a90d9}
+  .btn-tag{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.85rem;transition:all .15s}
+  .btn-tag:hover{background:#4a5568;color:#fff}
+  .speed-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .speed-row label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+  .speed-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.8rem;width:46px;outline:none;text-align:center}
+  .speed-input:focus{border-color:#4a90d9}
+  .btn-speed{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.7rem;font-weight:600;transition:all .15s;white-space:nowrap}
+  .btn-speed:hover{background:#4a5568;color:#fff}
+  .btn-speed:disabled{opacity:.4;cursor:not-allowed}
+  .btn-speed.testing{background:#4a90d9;color:#fff}
+  .speed-unit{font-size:.6rem;color:#576574}
+</style>
+</head>
+<body>
+
+<div class="top-row">
+  <div class="top-left">
+    <div class="header-line">
+      <h1>📡 HTTPS Response Time Monitor</h1>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-toggle" id="toggleBtn" onclick="toggleMonitor()" title="Pause/Resume">⏸</button>
+        <button class="btn btn-clear" onclick="clearAllData()">Clear</button>
+        <div class="sound-toggle">
+          <span class="sound-label">🔊</span>
+          <button class="sound-btn active-on" id="sndOff" onclick="setSoundMode('off')">Off</button>
+          <button class="sound-btn" id="sndOn" onclick="setSoundMode('on')">On</button>
+          <button class="sound-btn" id="sndErr" onclick="setSoundMode('err')">Err</button>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <div>
+        <label>Target URL <a href="javascript:void(0)" onclick="resetURL()" style="font-size:.65rem;color:#4a90d9;text-decoration:none;text-transform:none;letter-spacing:0" title="Reset to default URL">↺ reset</a></label><br>
+        <input type="text" id="urlInput" value="https://clients3.google.com/generate_204?r={rnd}" spellcheck="false">
+      </div>
+      <div>
+        <label>Interval (sec)</label><br>
+        <input type="number" id="intervalInput" value="3" min="1" max="300" style="width:60px">
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
+    <div class="range-row">
+      <label>Range</label>
+      <select class="range-select" id="rangeSelect" onchange="onRangeChange()"></select>
+    </div>
+    <div class="tag-controls">
+      <label>Tag:</label>
+      <input type="text" class="tag-input" id="tagInput" placeholder="e.g. WiFi-Home" onkeydown="if(event.key==='Enter')addTag()">
+      <button class="btn-tag" onclick="addTag()" title="Add tag">⏎</button>
+    </div>
+    <div class="speed-row">
+      <button class="btn-speed" id="dlBtn" onclick="manualDL()" title="Test download speed">⬇ DL</button>
+      <input type="number" class="speed-input" id="dlInterval" value="0" min="0" max="999" title="Auto-test interval in minutes (0=off)">
+      <span class="speed-unit">min</span>
+      <button class="btn-speed" id="ulBtn" onclick="manualUL()" title="Test upload speed">⬆ UL</button>
+      <input type="number" class="speed-input" id="ulInterval" value="0" min="0" max="999" title="Auto-test interval in minutes (0=off)">
+      <span class="speed-unit">min</span>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="label">Status</div><div class="value" id="statStatus"><span class="status-dot on"></span>Running</div></div>
+  <div class="stat"><div class="label">Last RTT</div><div class="value" id="statLast">—</div></div>
+  <div class="stat"><div class="label">Average</div><div class="value" id="statAvg">—</div></div>
+  <div class="stat"><div class="label">Min</div><div class="value" id="statMin">—</div></div>
+  <div class="stat"><div class="label">Max</div><div class="value" id="statMax">—</div></div>
+  <div class="stat"><div class="label">Requests</div><div class="value" id="statCount">0</div></div>
+  <div class="stat"><div class="label">Failures</div><div class="value" id="statFail">0</div></div>
+  <div class="stat"><div class="label">Jitter</div><div class="value" id="statJitter">—</div></div>
+</div>
+
+<div class="chart-wrap">
+  <div class="tag-strip" id="tagStrip"></div>
+  <canvas id="chart"></canvas>
+</div>
+
+<div class="log" id="log"></div>
+
+<script>
+// ===================== CONFIG =====================
+const Y_MAX = 5000;
+const RANGE_MS = 2 * 60 * 60 * 1000;
+const STORAGE_PREFIX = 'httpsmon_';
+const TAG_PREFIX = 'httpsmon_tags_';
+const SPEED_PREFIX = 'httpsmon_speed_';
+const MAX_AGE_DAYS = 10;
+const MAX_RANGES = 120;
+const MIN_ACTIVE_TAG_PX = 60;
+const MIN_CLOSED_TAG_PX = 5;
+const SPEED_TEST_BYTES = 5 * 1024 * 1024;
+const CHART_H = 320;
+const DL_ROW_H = 16;
+const UL_ROW_H = 16;
+const SPEED_GAP = 2;
+const TOTAL_CANVAS_H = CHART_H + SPEED_GAP + DL_ROW_H + UL_ROW_H;
+
+// ===================== CONFIG STORAGE =====================
+const CONFIG_KEY = 'httpsmon_config';
+const DEFAULT_CONFIG = {
+  url: 'https://clients3.google.com/generate_204?r={rnd}',
+  interval: 3,
+  dlInterval: 0,
+  ulInterval: 0
+};
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_KEY);
+    if (!raw) return { ...DEFAULT_CONFIG };
+    const parsed = JSON.parse(raw);
+    return {
+      url: typeof parsed.url === 'string' ? parsed.url : DEFAULT_CONFIG.url,
+      interval: typeof parsed.interval === 'number' ? parsed.interval : DEFAULT_CONFIG.interval,
+      dlInterval: typeof parsed.dlInterval === 'number' ? parsed.dlInterval : DEFAULT_CONFIG.dlInterval,
+      ulInterval: typeof parsed.ulInterval === 'number' ? parsed.ulInterval : DEFAULT_CONFIG.ulInterval
+    };
+  } catch(e) {
+    try { localStorage.removeItem(CONFIG_KEY); } catch(e2) {}
+    return { ...DEFAULT_CONFIG };
+  }
+}
+
+function saveConfig() {
+  const cfg = {
+    url: document.getElementById('urlInput').value,
+    interval: parseInt(document.getElementById('intervalInput').value) || 3,
+    dlInterval: parseInt(document.getElementById('dlInterval').value) || 0,
+    ulInterval: parseInt(document.getElementById('ulInterval').value) || 0
+  };
+  try {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+  } catch(e) {
+    purgeOld();
+    try { localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); } catch(e2) {}
+  }
+}
+
+function applyConfig(cfg) {
+  document.getElementById('urlInput').value = cfg.url;
+  document.getElementById('intervalInput').value = cfg.interval;
+  document.getElementById('dlInterval').value = cfg.dlInterval;
+  document.getElementById('ulInterval').value = cfg.ulInterval;
+}
+
+// ===================== STATE =====================
+let running = true, timer = null;
+let currentLiveRangeKey = null;
+let viewingRangeKey = null;
+let viewingData = [];
+let dlTesting = false, ulTesting = false;
+let dlTimer = null, ulTimer = null;
+let statsResetTime = 0;
+
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+
+// ===================== RANGE HELPERS =====================
+function getRangeStart(d) { const r = new Date(d); r.setHours(Math.floor(r.getHours()/2)*2,0,0,0); return r; }
+function getRangeEnd(rs) { return new Date(rs.getTime() + RANGE_MS); }
+function pad2(n) { return n < 10 ? '0'+n : ''+n; }
+function rangeKey(rs) {
+  const re = getRangeEnd(rs);
+  return rs.getFullYear()+'/'+pad2(rs.getMonth()+1)+'/'+pad2(rs.getDate())+' '+pad2(rs.getHours())+':'+pad2(rs.getMinutes())+'-'+pad2(re.getHours())+':'+pad2(re.getMinutes());
+}
+function rangeKeyToStartDate(k) {
+  const p=k.split(' '),d=p[0].split('/'),t=p[1].split('-')[0].split(':');
+  return new Date(+d[0],+d[1]-1,+d[2],+t[0],+t[1],0,0);
+}
+function getCurrentRangeKey() { return rangeKey(getRangeStart(new Date())); }
+
+// ===================== DATA STORAGE =====================
+function storageKey(rk) { return STORAGE_PREFIX + rk; }
+function loadRange(rk) {
+  try { const r=localStorage.getItem(storageKey(rk)); if(!r)return[]; return JSON.parse(r).map(p=>({time:new Date(p[0]),ms:p[1]})); } catch(e){return[];}
+}
+function saveRange(rk, pts) {
+  try { localStorage.setItem(storageKey(rk), JSON.stringify(pts.map(p=>[p.time.getTime(),p.ms]))); }
+  catch(e){ purgeOld(); try { localStorage.setItem(storageKey(rk), JSON.stringify(pts.map(p=>[p.time.getTime(),p.ms]))); } catch(e2){} }
+}
+function deleteRange(rk) { localStorage.removeItem(storageKey(rk)); }
+function getAllRangeKeys() {
+  const keys=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k.startsWith(STORAGE_PREFIX)&&!k.startsWith(TAG_PREFIX)&&!k.startsWith(SPEED_PREFIX)&&k!==CONFIG_KEY)
+      keys.push(k.slice(STORAGE_PREFIX.length));
+  }
+  return keys.sort();
+}
+function purgeOld() {
+  const cut=new Date(Date.now()-MAX_AGE_DAYS*86400000);
+  for(const rk of getAllRangeKeys()){if(rangeKeyToStartDate(rk)<cut){deleteRange(rk);deleteTags(rk);deleteSpeed(rk);}}
+  const rem=getAllRangeKeys();
+  if(rem.length>MAX_RANGES){const n=rem.length-MAX_RANGES;for(let i=0;i<n;i++){deleteRange(rem[i]);deleteTags(rem[i]);deleteSpeed(rem[i]);}}
+}
+
+// ===================== TAG STORAGE =====================
+function loadTags(rk){try{const r=localStorage.getItem(TAG_PREFIX+rk);return r?JSON.parse(r):[];}catch(e){return[];}}
+function saveTags(rk,t){try{localStorage.setItem(TAG_PREFIX+rk,JSON.stringify(t));}catch(e){}}
+function deleteTags(rk){localStorage.removeItem(TAG_PREFIX+rk);}
+
+// ===================== SPEED STORAGE =====================
+function loadSpeed(rk){try{const r=localStorage.getItem(SPEED_PREFIX+rk);return r?JSON.parse(r):[];}catch(e){return[];}}
+function saveSpeed(rk,d){try{localStorage.setItem(SPEED_PREFIX+rk,JSON.stringify(d));}catch(e){}}
+function deleteSpeed(rk){localStorage.removeItem(SPEED_PREFIX+rk);}
+
+function addSpeedResult(type, mbps) {
+  const now = Date.now();
+  const rk = getCurrentRangeKey();
+  const data = loadSpeed(rk);
+  const filtered = data.filter(d => !(d.type === type && now - d.time < 60000));
+  filtered.push({time: now, type: type, mbps: mbps});
+  saveSpeed(rk, filtered);
+  if (viewingRangeKey === rk) drawChart();
+}
+
+// ===================== SPEED TESTS =====================
+async function testDownload() {
+  const btn = document.getElementById('dlBtn');
+  if (dlTesting) return;
+  dlTesting = true;
+  btn.classList.add('testing');
+  btn.textContent = '⬇ …';
+  log('Download speed test started (5MB)…');
+  try {
+    const url = 'https://speed.cloudflare.com/__down?bytes=' + SPEED_TEST_BYTES + '&r=' + Date.now();
+    const t0 = performance.now();
+    const resp = await fetch(url);
+    await resp.arrayBuffer();
+    const elapsed = (performance.now() - t0) / 1000;
+    const mbps = Math.ceil((SPEED_TEST_BYTES * 8) / elapsed / 1000000);
+    addSpeedResult('dl', mbps);
+    log('Download: <span class="ms">' + mbps + ' Mbps</span> (' + elapsed.toFixed(1) + 's)');
+  } catch(e) {
+    addSpeedResult('dl', 0);
+    log('Download test failed: ' + e.message, true);
+  }
+  dlTesting = false;
+  btn.classList.remove('testing');
+  btn.textContent = '⬇ DL';
+}
+
+async function testUpload() {
+  const btn = document.getElementById('ulBtn');
+  if (ulTesting) return;
+  ulTesting = true;
+  btn.classList.add('testing');
+  btn.textContent = '⬆ …';
+  log('Upload speed test started (5MB)…');
+  try {
+    const blob = new Blob([new ArrayBuffer(SPEED_TEST_BYTES)]);
+    const t0 = performance.now();
+    await fetch('https://speed.cloudflare.com/__up', { method: 'POST', body: blob });
+    const elapsed = (performance.now() - t0) / 1000;
+    const mbps = Math.ceil((SPEED_TEST_BYTES * 8) / elapsed / 1000000);
+    addSpeedResult('ul', mbps);
+    log('Upload: <span class="ms">' + mbps + ' Mbps</span> (' + elapsed.toFixed(1) + 's)');
+  } catch(e) {
+    addSpeedResult('ul', 0);
+    log('Upload test failed: ' + e.message, true);
+  }
+  ulTesting = false;
+  btn.classList.remove('testing');
+  btn.textContent = '⬆ UL';
+}
+
+function manualDL() { testDownload(); }
+function manualUL() { testUpload(); }
+
+let speedQueue = [];
+let speedQueueRunning = false;
+
+async function processSpeedQueue() {
+  if (speedQueueRunning) return;
+  speedQueueRunning = true;
+  while (speedQueue.length) {
+    const job = speedQueue.shift();
+    if (job === 'dl') await testDownload();
+    else if (job === 'ul') await testUpload();
+  }
+  speedQueueRunning = false;
+}
+
+function enqueueSpeed(type) {
+  speedQueue.push(type);
+  processSpeedQueue();
+}
+
+function scheduleDL() {
+  clearTimeout(dlTimer);
+  const mins = parseInt(document.getElementById('dlInterval').value) || 0;
+  if (mins < 1) return;
+  dlTimer = setTimeout(() => { enqueueSpeed('dl'); scheduleDL(); }, mins * 60000);
+}
+function scheduleUL() {
+  clearTimeout(ulTimer);
+  const mins = parseInt(document.getElementById('ulInterval').value) || 0;
+  if (mins < 1) return;
+  ulTimer = setTimeout(() => { enqueueSpeed('ul'); scheduleUL(); }, mins * 60000);
+}
+document.getElementById('dlInterval').addEventListener('input', () => { scheduleDL(); });
+document.getElementById('dlInterval').addEventListener('change', () => { scheduleDL(); });
+document.getElementById('ulInterval').addEventListener('input', () => { scheduleUL(); });
+document.getElementById('ulInterval').addEventListener('change', () => { scheduleUL(); });
+
+// ===================== TAG UI =====================
+function tagColor(text) {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) { h = ((h << 5) - h + text.charCodeAt(i)) | 0; }
+  const hue = ((h % 360) + 360) % 360;
+  const safeHue = (hue >= 20 && hue <= 40) ? hue + 40 : hue;
+  return 'hsla(' + safeHue + ',65%,50%,0.5)';
+}
+
+function addTag() {
+  const input = document.getElementById('tagInput');
+  const text = input.value.trim();
+  if (!text || !currentLiveRangeKey) return;
+  const now = Date.now(), tags = loadTags(currentLiveRangeKey);
+  if (tags.length && tags[tags.length-1].end === null) tags[tags.length-1].end = now;
+  const color = tagColor(text);
+  tags.push({text:text, color:color, start:now, end:null});
+  saveTags(currentLiveRangeKey, tags);
+  input.value = '';
+  statsResetTime = Date.now();
+  if (viewingRangeKey === currentLiveRangeKey) { renderTags(); updateStatsFromViewing(); }
+  log('Tag added: ' + text);
+}
+function removeTag(rk, idx) {
+  const tags = loadTags(rk);
+  if (idx<0||idx>=tags.length) return;
+  tags.splice(idx,1);
+  saveTags(rk,tags);
+  renderTags();
+}
+
+function getChartLayout() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width - 32;
+  return {W:W, padLeft:60, padRight:20, cw:W-60-20};
+}
+
+function renderTags() {
+  const strip = document.getElementById('tagStrip');
+  strip.innerHTML = '';
+  if (!viewingRangeKey) return;
+  const tags = loadTags(viewingRangeKey);
+  if (!tags.length) return;
+  const tStart = rangeKeyToStartDate(viewingRangeKey);
+  const layout = getChartLayout();
+  const now = Date.now();
+  const isLive = viewingRangeKey === currentLiveRangeKey;
+  for (let i=0; i<tags.length; i++) {
+    const tag = tags[i];
+    const tS = Math.max(tag.start, tStart.getTime());
+    const tE = tag.end !== null ? tag.end : (isLive ? now : tStart.getTime());
+    const xStart = layout.padLeft + ((tS - tStart.getTime()) / RANGE_MS) * layout.cw;
+    const xEnd = layout.padLeft + ((tE - tStart.getTime()) / RANGE_MS) * layout.cw;
+    let w = xEnd - xStart;
+    const isActive = tag.end === null && isLive;
+    if (!isActive && w < MIN_CLOSED_TAG_PX) continue;
+    if (isActive && w < MIN_ACTIVE_TAG_PX) w = MIN_ACTIVE_TAG_PX;
+    const el = document.createElement('div');
+    el.className = 'tag-bar';
+    el.style.left = xStart+'px'; el.style.width = w+'px'; el.style.background = tag.color;
+    el.textContent = tag.text;
+    el.title = tag.text + ' (right-click to remove)';
+    const ri=i, rrk=viewingRangeKey;
+    el.addEventListener('contextmenu', function(e){e.preventDefault();removeTag(rrk,ri);});
+    strip.appendChild(el);
+  }
+}
+
+// ===================== LISTBOX =====================
+function populateRangeSelect() {
+  const sel = document.getElementById('rangeSelect');
+  const keys = getAllRangeKeys();
+  const currentKey = getCurrentRangeKey();
+  const filtered = keys.filter(k => k <= currentKey);
+  if (currentLiveRangeKey && !filtered.includes(currentLiveRangeKey)) { filtered.push(currentLiveRangeKey); filtered.sort(); }
+  sel.innerHTML = '';
+  for (let i=filtered.length-1; i>=0; i--) { const o=document.createElement('option'); o.value=filtered[i]; o.textContent=filtered[i]; sel.appendChild(o); }
+  if (viewingRangeKey && filtered.includes(viewingRangeKey)) sel.value = viewingRangeKey;
+  else { sel.value = currentLiveRangeKey||(filtered.length?filtered[filtered.length-1]:''); viewingRangeKey = sel.value; }
+}
+function onRangeChange() {
+  viewingRangeKey = document.getElementById('rangeSelect').value;
+  loadViewingData(); updateStatsFromViewing(); drawChart(); renderTags();
+}
+function loadViewingData() { viewingData = loadRange(viewingRangeKey); }
+
+// ===================== CANVAS =====================
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width - 32;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = TOTAL_CANVAS_H * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = TOTAL_CANVAS_H + 'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  drawChart(); renderTags();
+}
+function resizeLog(){
+  const logEl=document.getElementById('log');
+  const top=logEl.getBoundingClientRect().top+window.scrollY;
+  const avail=window.innerHeight-top-14;
+  if(avail>=120){logEl.style.height=avail+'px';}
+  else{logEl.style.height='120px';}
+}
+window.addEventListener('resize',function(){resizeCanvas();resizeLog();});
+
+function drawChart() {
+  const W = canvas.width / (window.devicePixelRatio||1);
+  const pad = {top:16, right:20, bottom:24, left:60};
+  const cw = W - pad.left - pad.right;
+  const ch = CHART_H - pad.top - pad.bottom;
+  ctx.clearRect(0,0,W,TOTAL_CANVAS_H);
+  if (!viewingRangeKey) return;
+
+  const tStart = rangeKeyToStartDate(viewingRangeKey);
+  const tEnd = getRangeEnd(tStart);
+
+  // Grid
+  ctx.strokeStyle='#1e2a3a'; ctx.lineWidth=1;
+  const ySteps=[0,500,1000,1500,2000,2500,3000,3500,4000,4500,5000];
+  ctx.font='10px system-ui'; ctx.fillStyle='#576574'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(const v of ySteps){const y=pad.top+ch-(v/Y_MAX)*ch;ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(pad.left+cw,y);ctx.stroke();ctx.fillText(v>=1000?(v/1000)+'s':v+'ms',pad.left-6,y);}
+  ctx.textAlign='center';ctx.textBaseline='top';
+  const xInt=10*60*1000;
+  const firstTick=Math.ceil(tStart.getTime()/xInt)*xInt;
+  for(let t=firstTick;t<=tEnd.getTime();t+=xInt){const x=pad.left+((t-tStart.getTime())/RANGE_MS)*cw;ctx.beginPath();ctx.moveTo(x,pad.top);ctx.lineTo(x,pad.top+ch);ctx.stroke();ctx.fillText(fmtTime(new Date(t)),x,pad.top+ch+4);}
+  ctx.fillStyle='#8395a7';ctx.font='11px system-ui';ctx.textAlign='center';
+  ctx.save();ctx.translate(12,pad.top+ch/2);ctx.rotate(-Math.PI/2);ctx.fillText('Response Time',0,0);ctx.restore();
+
+  // Data
+  if(viewingData.length){
+    const good=viewingData.filter(p=>p.ms!==null), bad=viewingData.filter(p=>p.ms===null);
+    if(good.length>1){
+      ctx.beginPath();ctx.strokeStyle='#4a90d9';ctx.lineWidth=1.5;ctx.lineJoin='round';
+      let first=true;
+      for(const p of good){const x=pad.left+((p.time.getTime()-tStart.getTime())/RANGE_MS)*cw;const y=pad.top+ch-(Math.min(p.ms,Y_MAX)/Y_MAX)*ch;if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);}
+      ctx.stroke();
+      const last=good[good.length-1];
+      ctx.lineTo(pad.left+((last.time.getTime()-tStart.getTime())/RANGE_MS)*cw,pad.top+ch);
+      ctx.lineTo(pad.left+((good[0].time.getTime()-tStart.getTime())/RANGE_MS)*cw,pad.top+ch);
+      ctx.closePath();
+      const grad=ctx.createLinearGradient(0,pad.top,0,pad.top+ch);
+      grad.addColorStop(0,'rgba(74,144,217,0.25)');grad.addColorStop(1,'rgba(74,144,217,0.02)');
+      ctx.fillStyle=grad;ctx.fill();
+    }
+    for(const p of good){const x=pad.left+((p.time.getTime()-tStart.getTime())/RANGE_MS)*cw;const y=pad.top+ch-(Math.min(p.ms,Y_MAX)/Y_MAX)*ch;ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fillStyle=p.ms<500?'#2ecc71':p.ms<2000?'#f39c12':'#e74c3c';ctx.fill();}
+    for(const p of bad){const x=pad.left+((p.time.getTime()-tStart.getTime())/RANGE_MS)*cw;ctx.beginPath();ctx.arc(x,pad.top+8,4,0,Math.PI*2);ctx.fillStyle='#e74c3c';ctx.fill();ctx.strokeStyle='#ff6b6b';ctx.lineWidth=1;ctx.stroke();}
+  }
+
+  // ---- Speed results below chart ----
+  const speedY = CHART_H + SPEED_GAP;
+  const speedData = loadSpeed(viewingRangeKey);
+  const dlResults = speedData.filter(d => d.type === 'dl');
+  const ulResults = speedData.filter(d => d.type === 'ul');
+
+  ctx.font = '9px system-ui';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#4a90d9';
+  ctx.textAlign = 'right';
+  ctx.fillText('DL', pad.left - 6, speedY);
+
+  ctx.strokeStyle = '#1e2a3a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.left, speedY + DL_ROW_H/2); ctx.lineTo(pad.left+cw, speedY + DL_ROW_H/2); ctx.stroke();
+
+  for (const r of dlResults) {
+    const x = pad.left + ((r.time - tStart.getTime()) / RANGE_MS) * cw;
+    ctx.fillStyle = r.mbps > 0 ? '#4a90d9' : '#e74c3c';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.mbps > 0 ? r.mbps + '' : '✗', x, speedY + 1);
+  }
+
+  const ulY = speedY + DL_ROW_H;
+  ctx.fillStyle = '#a29bfe';
+  ctx.textAlign = 'right';
+  ctx.fillText('UL', pad.left - 6, ulY);
+
+  ctx.strokeStyle = '#1e2a3a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.left, ulY + UL_ROW_H/2); ctx.lineTo(pad.left+cw, ulY + UL_ROW_H/2); ctx.stroke();
+
+  for (const r of ulResults) {
+    const x = pad.left + ((r.time - tStart.getTime()) / RANGE_MS) * cw;
+    ctx.fillStyle = r.mbps > 0 ? '#a29bfe' : '#e74c3c';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.mbps > 0 ? r.mbps + '' : '✗', x, ulY + 1);
+  }
+}
+
+function fmtTime(d) { return pad2(d.getHours())+':'+pad2(d.getMinutes()); }
+
+// ===================== STATS =====================
+function updateStatsFromViewing() {
+  const isLive = viewingRangeKey === currentLiveRangeKey;
+  const filtered = isLive && statsResetTime > 0
+    ? viewingData.filter(p => p.time.getTime() >= statsResetTime)
+    : viewingData;
+  const vals=filtered.filter(p=>p.ms!==null).map(p=>p.ms);
+  const fails=filtered.filter(p=>p.ms===null).length;
+  document.getElementById('statCount').textContent=filtered.length;
+  document.getElementById('statFail').textContent=fails;
+  document.getElementById('statFail').className='value'+(fails>0?' bad':'');
+  if(vals.length){
+    const last=vals[vals.length-1],avg=Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+    const mn=Math.min(...vals),mx=Math.max(...vals);
+    const cls=v=>v<500?'good':v<2000?'warn':'bad';
+    document.getElementById('statLast').textContent=last+' ms';document.getElementById('statLast').className='value '+cls(last);
+    document.getElementById('statAvg').textContent=avg+' ms';document.getElementById('statAvg').className='value '+cls(avg);
+    document.getElementById('statMin').textContent=mn+' ms';document.getElementById('statMin').className='value good';
+    document.getElementById('statMax').textContent=mx+' ms';document.getElementById('statMax').className='value '+cls(mx);
+    // Jitter: avg of absolute consecutive diffs, last 40 samples
+    const recent = vals.slice(-40);
+    if(recent.length>=2){
+      let sum=0;for(let i=1;i<recent.length;i++)sum+=Math.abs(recent[i]-recent[i-1]);
+      const jitter=Math.round(sum/(recent.length-1));
+      const jCls=jitter<50?'good':jitter<200?'warn':'bad';
+      document.getElementById('statJitter').textContent=jitter+' ms';document.getElementById('statJitter').className='value '+jCls;
+    } else {
+      document.getElementById('statJitter').textContent='—';document.getElementById('statJitter').className='value';
+    }
+  } else {
+    for(const id of['statLast','statAvg','statMin','statMax']){document.getElementById(id).textContent='—';document.getElementById(id).className='value';}
+    document.getElementById('statJitter').textContent='—';document.getElementById('statJitter').className='value';
+  }
+}
+
+// ===================== AUDIO =====================
+let audioCtx=null,audioUnlocked=false;
+// soundMode: 'off' | 'on' | 'err'
+let soundMode='off';
+
+function initAudio(){
+  if(audioCtx)return;
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  audioCtx.resume().then(()=>{audioUnlocked=true;});
+}
+
+function setSoundMode(mode){
+  soundMode=mode;
+  if(mode!=='off'){
+    initAudio();
+    if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume().then(()=>{audioUnlocked=true;});
+    else audioUnlocked=true;
+  }
+  // Update button styles
+  document.getElementById('sndOff').className='sound-btn'+(mode==='off'?' active-on':'');
+  document.getElementById('sndOn').className='sound-btn'+(mode==='on'?' active-on':'');
+  document.getElementById('sndErr').className='sound-btn'+(mode==='err'?' active-err':'');
+}
+
+function beep(freq,ms){
+  if(soundMode==='off'||!audioCtx||!audioUnlocked||audioCtx.state==='suspended')return;
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);
+  o.frequency.value=freq;g.gain.value=0.15;o.start();o.stop(audioCtx.currentTime+ms/1000);
+}
+
+// ===================== PROBE =====================
+async function probe(url){
+  if(soundMode==='on')beep(300,50);
+  const t0=performance.now();
+  const rnd=String(Math.floor(10000000+Math.random()*90000000));
+  const finalUrl=url.replace(/\{rnd\}/g,rnd);
+  try{
+    const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),5000);
+    await fetch(finalUrl,{mode:'no-cors',cache:'no-store',signal:ctrl.signal});clearTimeout(tid);
+    const ms=Math.round(performance.now()-t0);
+    if(soundMode==='on')beep(ms>=3000?1000:250,50);
+    else if(soundMode==='err'&&ms>=3000)beep(1000,50);
+    return {ms:ms,url:finalUrl};
+  }catch(e){
+    if(soundMode==='on'||soundMode==='err')beep(1000,50);
+    return {ms:null,url:finalUrl};
+  }
+}
+
+// ===================== LOGGING =====================
+function log(msg,err){
+  const el=document.getElementById('log'),e=document.createElement('div');e.className='log-entry';
+  const now=fmtTime(new Date());
+  e.innerHTML=err?'<span class="time">['+now+']</span> <span class="err">'+msg+'</span>':'<span class="time">['+now+']</span> '+msg;
+  el.appendChild(e);el.scrollTop=el.scrollHeight;while(el.children.length>200)el.removeChild(el.firstChild);
+}
+
+// ===================== MAIN LOOP =====================
+async function tick(){
+  if(!running)return;
+  const url=document.getElementById('urlInput').value.trim();
+  const interval=(parseInt(document.getElementById('intervalInput').value)||3)*1000;
+  const probeResult=await probe(url);
+  const ms=probeResult.ms;
+  const probedUrl=probeResult.url;
+  const now=new Date();
+  const newRangeKey=getCurrentRangeKey();
+
+  if(newRangeKey!==currentLiveRangeKey){
+    const prevKey=currentLiveRangeKey;
+    const oldTags=loadTags(prevKey);
+    if(oldTags.length&&oldTags[oldTags.length-1].end===null){
+      oldTags[oldTags.length-1].end=rangeKeyToStartDate(prevKey).getTime()+RANGE_MS;
+      saveTags(prevKey,oldTags);
+      const cont=oldTags[oldTags.length-1];
+      const newTags=loadTags(newRangeKey);
+      newTags.push({text:cont.text,color:cont.color,start:rangeKeyToStartDate(newRangeKey).getTime(),end:null});
+      saveTags(newRangeKey,newTags);
+    }
+    currentLiveRangeKey=newRangeKey;
+    const shouldAutoSwitch=(viewingRangeKey===prevKey);
+    populateRangeSelect();
+    if(shouldAutoSwitch){viewingRangeKey=newRangeKey;document.getElementById('rangeSelect').value=newRangeKey;viewingData=[];updateStatsFromViewing();drawChart();renderTags();}
+    purgeOld();
+  }
+
+  const liveData=loadRange(currentLiveRangeKey);
+  liveData.push({time:now,ms:ms});
+  saveRange(currentLiveRangeKey,liveData);
+
+  const sel=document.getElementById('rangeSelect');
+  let hasKey=false;for(const o of sel.options)if(o.value===currentLiveRangeKey){hasKey=true;break;}
+  if(!hasKey){populateRangeSelect();if(!viewingRangeKey||viewingRangeKey===currentLiveRangeKey){sel.value=currentLiveRangeKey;viewingRangeKey=currentLiveRangeKey;}}
+
+  if(viewingRangeKey===currentLiveRangeKey){viewingData=liveData;updateStatsFromViewing();drawChart();renderTags();}
+
+  if(ms!==null)log('GET '+probedUrl+' → <span class="ms">'+ms+' ms</span>');
+  else log('GET '+probedUrl+' → TIMEOUT / ERROR',true);
+
+  if(running)timer=setTimeout(tick,interval);
+}
+
+// ===================== CONTROLS =====================
+function resetURL(){
+  document.getElementById('urlInput').value=DEFAULT_CONFIG.url;
+  saveConfig();
+  log('URL reset to default');
+}
+function toggleMonitor(){
+  if(running){running=false;clearTimeout(timer);document.getElementById('toggleBtn').textContent='▶';document.getElementById('toggleBtn').title='Resume';document.getElementById('statStatus').innerHTML='<span class="status-dot off"></span>Paused';log('Monitor paused');}
+  else{running=true;document.getElementById('toggleBtn').textContent='⏸';document.getElementById('toggleBtn').title='Pause';document.getElementById('statStatus').innerHTML='<span class="status-dot on"></span>Running';log('Monitor resumed');tick();}
+}
+function clearAllData(){
+  if(!confirm('Clear ALL stored monitoring data, tags, and speed results? This cannot be undone.'))return;
+  const toRemove=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith(STORAGE_PREFIX)||k.startsWith(TAG_PREFIX)||k.startsWith(SPEED_PREFIX))toRemove.push(k);}
+  toRemove.forEach(k=>localStorage.removeItem(k));
+  viewingData=[];viewingRangeKey=currentLiveRangeKey;populateRangeSelect();
+  document.getElementById('rangeSelect').value=currentLiveRangeKey;
+  updateStatsFromViewing();drawChart();renderTags();document.getElementById('log').innerHTML='';log('All data cleared');
+}
+
+// ===================== INIT =====================
+function init(){
+  try {
+    const cfg = loadConfig();
+    applyConfig(cfg);
+
+    document.getElementById('urlInput').addEventListener('input', saveConfig);
+    document.getElementById('urlInput').addEventListener('change', saveConfig);
+    document.getElementById('intervalInput').addEventListener('input', saveConfig);
+    document.getElementById('intervalInput').addEventListener('change', saveConfig);
+    document.getElementById('dlInterval').addEventListener('input', saveConfig);
+    document.getElementById('dlInterval').addEventListener('change', saveConfig);
+    document.getElementById('ulInterval').addEventListener('input', saveConfig);
+    document.getElementById('ulInterval').addEventListener('change', saveConfig);
+
+    currentLiveRangeKey=getCurrentRangeKey();viewingRangeKey=currentLiveRangeKey;
+    purgeOld();populateRangeSelect();document.getElementById('rangeSelect').value=currentLiveRangeKey;
+    loadViewingData();updateStatsFromViewing();resizeCanvas();resizeLog();
+    log('Monitor started — target: '+document.getElementById('urlInput').value);
+    tick(); scheduleDL(); scheduleUL();
+  } catch(e) {
+    try { localStorage.removeItem(CONFIG_KEY); } catch(e2) {}
+    location.reload();
+  }
+}
+init();
+</script>
+</body>
+</html>
