@@ -17,15 +17,16 @@ import (
 	"golang.org/x/sys/windows"
 
 	"netmon/internal/icon"
+	"netmon/internal/sound"
 )
 
-// On Windows the program plays the beeps itself, so they work with no browser open.
+// On Windows the program plays the beeps itself (smooth sine tones, see
+// internal/sound), so they work with no browser open.
 const nativeSound = true
 
 var (
 	kernel32         = windows.NewLazySystemDLL("kernel32.dll")
 	pAttachConsole   = kernel32.NewProc("AttachConsole")
-	pBeep            = kernel32.NewProc("Beep")
 	pMessageBox      = windows.NewLazySystemDLL("user32.dll").NewProc("MessageBoxW")
 	consoleAvailable bool
 )
@@ -81,7 +82,7 @@ var beepCh = make(chan [2]uint32, 8)
 func init() {
 	go func() {
 		for b := range beepCh {
-			pBeep.Call(uintptr(b[0]), uintptr(b[1])) // blocks for the duration
+			sound.Play(int(b[0]), int(b[1])) // blocks for the duration
 		}
 	}()
 }

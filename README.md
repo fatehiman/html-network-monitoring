@@ -63,7 +63,7 @@ Right-click menu:
   - **Err** — only the 1000 Hz beep, for replies ≥ 3000 ms or failed
 - **Exit** — stops monitoring and closes netmon
 
-The sound choice is saved and used on the next start. The Off/On/Err buttons in the page change the same setting. On Windows the **program** plays the beeps (Windows `Beep` sound), so they work with no browser open, and the page stays silent to avoid double beeps.
+The sound choice is saved and used on the next start. The Off/On/Err buttons in the page change the same setting. On Windows the **program** plays the beeps (smooth sine tones, see below), so they work with no browser open, and the page stays silent to avoid double beeps.
 
 ### Command-line options
 
@@ -108,7 +108,7 @@ Then `sudo systemctl enable --now netmon` and open `http://<server-ip>:8765`.
 - **Probe:** `GET` on the URL, `{rnd}` is replaced by a random 8-digit number (cache busting). Any HTTP answer (even 403/404) counts as success, because the goal is the network round-trip. No answer within 5 s = failure. Redirects are not followed. Connections are reused (keep-alive), like a browser does.
 - **UI:** the page in `app/web/index.html` is built into the executable. It loads the data with `GET /api/state` and `GET /api/range?key=…`, then gets live updates as Server-Sent Events from `/api/events`. Buttons call `POST /api/…`. POST requests must have the header `X-Netmon: 1`, so other web sites cannot control netmon from your browser.
 - **Tray (Windows):** `tray_windows.go` uses `fyne.io/systray` (pure Go on Windows) and listens to the same live events as the page. The icons are drawn in code (`internal/icon`).
-- **Beeps:** Windows — played by the program. Linux — played by the page while a UI tab is open (click once on the page to allow audio).
+- **Beeps:** Windows — played by the program (`internal/sound`): a sine tone with a 5 ms fade-in and fade-out, played with `PlaySound`. The Windows `Beep()` API is not used, because it makes a square wave that starts and stops at full volume, which sounds like a click or buzz. Linux — played by the page while a UI tab is open (click once on the page to allow audio).
 - **Single instance:** an exclusive lock on `netmon.lock` in the data folder (`LockFileEx` on Windows, `flock` on Linux). The OS releases it when the program ends, even after a crash. The file holds the UI address for the error message.
 
 ### Data files
@@ -162,6 +162,7 @@ Source files in `app/`:
 | `tray_windows.go` | Windows tray, beeps, message box, lock |
 | `platform_other.go` | Linux console front end, lock |
 | `internal/icon/` | draws the icon (tray, favicon, exe) |
+| `internal/sound/` | makes and plays the Windows beeps |
 | `web/index.html` | UI |
 | `rsrc_windows_*.syso` | exe icon + manifest, made with go-winres (see below) |
 
@@ -172,7 +173,7 @@ go run ./tools/genicon winres/icon.png
 go run github.com/tc-hib/go-winres@v0.3.3 simply --icon winres/icon.png --manifest gui --product-name netmon --file-description "netmon internet monitor" --arch amd64,arm64
 ```
 
-`go run ./tools/iconpreview preview.png` draws all colors and sizes on one sheet.
+`go run ./tools/iconpreview preview.png` draws all colors and sizes on one sheet. `go run ./tools/beeptest` (Windows) plays the "On" beep pattern.
 
 ---
 
