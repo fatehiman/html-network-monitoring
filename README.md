@@ -6,7 +6,7 @@ There are two versions:
 
 | | **netmon app** (recommended) | **Browser version** (`ping10.htm`) |
 |---|---|---|
-| Runs as | One executable for Windows or Linux | One HTML file opened in a browser |
+| Runs as | One executable: Windows **system-tray** app, Linux console program | One HTML file opened in a browser |
 | Keeps measuring when the window is hidden / minimized / closed | **Yes** — measuring runs in the program, not in the page | No — browsers slow down and then stop timers in hidden tabs |
 | Speed test server | Nearest **Ookla** (speedtest.net) server, or Cloudflare | Cloudflare only (Ookla servers block browser requests with CORS) |
 | Data saved in | Files in a data folder | Browser `localStorage` |
@@ -32,23 +32,51 @@ Get the file for your system from the [GitHub Releases](https://github.com/fateh
 
 Nothing to install. No browser engine is inside the program.
 
-- **Windows:** double-click the `.exe`. A console window opens (it shows the log) and the UI opens in your default browser.
-- **Linux:** `chmod +x netmon-linux-amd64 && ./netmon-linux-amd64`
+- **Windows:** double-click the `.exe`. There is **no window**: netmon runs in the **system tray** (see below). Windows 11 hides new tray icons under the **^** arrow; drag the icon to the taskbar to keep it visible.
+- **Linux:** a console program: `chmod +x netmon-linux-amd64 && ./netmon-linux-amd64`. It opens the UI in a browser if there is a desktop. Press `Ctrl+C` to stop.
 
-The UI is at **http://127.0.0.1:8765**. You can close the browser tab at any time — measuring does not stop. To stop measuring, close the console window or press `Ctrl+C`.
+The UI is at **http://127.0.0.1:8765**. You can close the browser tab at any time — measuring does not stop.
 
-If you start netmon a second time, it does not start a second copy; it only opens the UI of the running one.
+**Only one copy runs at a time** (per data folder). If you start netmon again while it is running, it shows an error (a message box on Windows, a message on the console on Linux) with the address of the running copy, and exits.
+
+**Busy port:** if port 8765 is used by another program, netmon tries 8766, 8767, … (up to 100 ports) and uses the first free one. The tray **Open** item, the console output and the error message always show the real address.
+
+### Windows tray icon
+
+The icon is a pulse line on a colored square. The color follows the **last** reply, with the same colors as the dots on the chart:
+
+| Color | Meaning |
+|---|---|
+| 🟩 green | reply in less than 500 ms |
+| 🟧 orange | reply in 500–1999 ms |
+| 🟥 red | reply in 2000 ms or more, or no reply (timeout 5 s / error) |
+| ⬜ grey | starting, or paused |
+
+Hover over it to see the last time, the target host and the last DL/UL speed.
+
+Right-click menu:
+
+- **Open** — opens the UI in your default browser
+- **Sound** ▸ **Off** / **On** / **Err** — only one is checked:
+  - **Off** — no sound
+  - **On** — 300 Hz beep when a request is sent; on reply 250 Hz (< 3000 ms) or 1000 Hz (≥ 3000 ms or failed); each 50 ms
+  - **Err** — only the 1000 Hz beep, for replies ≥ 3000 ms or failed
+- **Exit** — stops monitoring and closes netmon
+
+The sound choice is saved and used on the next start. The Off/On/Err buttons in the page change the same setting. On Windows the **program** plays the beeps (Windows `Beep` sound), so they work with no browser open, and the page stays silent to avoid double beeps.
 
 ### Command-line options
 
 | Option | Default | Meaning |
 |---|---|---|
-| `-port` | `8765` | Port of the UI |
+| `-port` | `8765` | Port of the UI. If it is busy, the next free port is used |
 | `-listen` | `127.0.0.1` | Address to listen on. Use `0.0.0.0` to open the UI from other PCs on your LAN (anyone on the LAN can then control it) |
-| `-data` | Windows: `%AppData%\netmon`, Linux: `~/.config/netmon` | Folder for config and measurements |
-| `-no-browser` | off | Do not open the browser at start |
+| `-data` | Windows: `%AppData%\netmon`, Linux: `~/.config/netmon` | Folder for config and measurements. One netmon can run per folder |
+| `-no-browser` | off | Linux: do not open the browser at start (Windows never opens it at start) |
 | `-quiet` | off | Do not print the log to the console |
 | `-version` | | Print the version and exit |
+
+On Windows the options work too (for example in a shortcut). If you start the `.exe` from a terminal, its output is printed there.
 
 ### Run all the time
 
@@ -72,21 +100,24 @@ WantedBy=multi-user.target
 
 Then `sudo systemctl enable --now netmon` and open `http://<server-ip>:8765`.
 
-**Windows** — start it at logon without a console window: Task Scheduler → *Create Task* → Trigger *At log on* → Action *Start a program*: `netmon-windows-amd64.exe` with arguments `-no-browser -quiet`. Tick *Run whether user is logged on or not* to hide the console.
+**Windows** — start it at logon: press `Win+R`, type `shell:startup`, and put a shortcut to `netmon-windows-amd64.exe` in that folder.
 
 ### How it works
 
 - **Engine (Go):** a loop sends the probe, waits for the answer, stores the point, then waits `interval` seconds and repeats (the wait starts *after* the answer, so slow answers never pile up). Go timers are not slowed down when the window is hidden.
 - **Probe:** `GET` on the URL, `{rnd}` is replaced by a random 8-digit number (cache busting). Any HTTP answer (even 403/404) counts as success, because the goal is the network round-trip. No answer within 5 s = failure. Redirects are not followed. Connections are reused (keep-alive), like a browser does.
 - **UI:** the page in `app/web/index.html` is built into the executable. It loads the data with `GET /api/state` and `GET /api/range?key=…`, then gets live updates as Server-Sent Events from `/api/events`. Buttons call `POST /api/…`. POST requests must have the header `X-Netmon: 1`, so other web sites cannot control netmon from your browser.
-- **Beeps** are played by the page when a live event arrives, so they only play while a UI tab is open.
+- **Tray (Windows):** `tray_windows.go` uses `fyne.io/systray` (pure Go on Windows) and listens to the same live events as the page. The icons are drawn in code (`internal/icon`).
+- **Beeps:** Windows — played by the program. Linux — played by the page while a UI tab is open (click once on the page to allow audio).
+- **Single instance:** an exclusive lock on `netmon.lock` in the data folder (`LockFileEx` on Windows, `flock` on Linux). The OS releases it when the program ends, even after a crash. The file holds the UI address for the error message.
 
 ### Data files
 
 In the data folder:
 
-- `config.json` — target URL, intervals, speed server, your saved URLs
+- `config.json` — target URL, intervals, speed server, your saved URLs, sound mode
 - `ranges/YYYYMMDD-HH.json` — one file per 2-hour range: `{"points": [[timestampMs, ms|null], …], "tags": […], "speed": […]}`
+- `netmon.lock` — single-instance lock
 
 Ranges older than 10 days are deleted; at most 120 ranges are kept.
 
@@ -97,7 +128,7 @@ Ranges older than 10 days are deleted; at most 120 ranges are kept.
 | GET | `/api/state` | | config, presets, running, live range key, range list, last 200 log lines |
 | GET | `/api/range?key=2026/03/06 00:00-02:00` | | points, tags, speed results of one range |
 | GET | `/api/events` | | Server-Sent Events: `probe`, `point`, `range`, `log`, `tags`, `speed`, `speedstate`, `speedprogress`, `config`, `running`, `cleared` |
-| POST | `/api/config` | any of `url`, `interval`, `dlInterval`, `ulInterval`, `speedServer` | new config |
+| POST | `/api/config` | any of `url`, `interval`, `dlInterval`, `ulInterval`, `speedServer`, `soundMode` | new config |
 | POST | `/api/urls/add` / `/api/urls/remove` | `{"url": "…"}` | new config |
 | POST | `/api/toggle` | | `true` = running |
 | POST | `/api/tag` | `{"text": "4G"}` | |
@@ -117,7 +148,31 @@ go test ./...
 
 The executables go to `dist/`.
 
-Source files in `app/`: `main.go` (flags, HTTP server), `engine.go` (probe loop, ranges, tags, events), `speed.go` (speed tests), `store.go` (data files), `config.go` (config and URL presets), `web/index.html` (UI).
+Windows executables are built with `-H windowsgui` (no console window).
+
+Source files in `app/`:
+
+| File | What |
+|---|---|
+| `main.go` | flags, single instance, free port, HTTP server |
+| `engine.go` | probe loop, ranges, tags, events |
+| `speed.go` | speed tests |
+| `store.go` | data files |
+| `config.go` | config and URL presets |
+| `tray_windows.go` | Windows tray, beeps, message box, lock |
+| `platform_other.go` | Linux console front end, lock |
+| `internal/icon/` | draws the icon (tray, favicon, exe) |
+| `web/index.html` | UI |
+| `rsrc_windows_*.syso` | exe icon + manifest, made with go-winres (see below) |
+
+To change the exe icon, edit `internal/icon`, then:
+
+```sh
+go run ./tools/genicon winres/icon.png
+go run github.com/tc-hib/go-winres@v0.3.3 simply --icon winres/icon.png --manifest gui --product-name netmon --file-description "netmon internet monitor" --arch amd64,arm64
+```
+
+`go run ./tools/iconpreview preview.png` draws all colors and sizes on one sheet.
 
 ---
 
@@ -147,11 +202,13 @@ Put `{rnd}` in your URL to avoid cached answers.
 
 ### 3. Audio beeps
 
-Three modes (not saved; always starts **Off**):
+Three modes:
 
 - **Off** — silent
 - **On** — 300 Hz when a request is sent, 250 Hz when the answer is <3000 ms, 1000 Hz when ≥3000 ms or failed
 - **Err** — only the 1000 Hz beep for slow (≥3000 ms) or failed requests
+
+Browser version: not saved, always starts Off. App: saved in `config.json`; on Windows shared with the tray menu.
 
 Beeps are dropped (not queued) while the browser's `AudioContext` is suspended.
 

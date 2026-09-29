@@ -2,7 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"net"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -83,5 +86,41 @@ func TestTagColorMatchesJS(t *testing.T) {
 		if c := tagColor(text); c != want {
 			t.Errorf("%q: got %s want %s", text, c, want)
 		}
+	}
+}
+
+func TestSingleInstanceLock(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "netmon.lock")
+	f, err := lockInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.GC() // the lock must survive garbage collection while f is referenced
+	if g, err := lockInstance(p); err == nil {
+		g.Close()
+		t.Fatal("second lock succeeded; want failure")
+	}
+	f.Close()
+	g, err := lockInstance(p)
+	if err != nil {
+		t.Fatalf("lock after release failed: %v", err)
+	}
+	g.Close()
+}
+
+func TestListenFreeSkipsBusyPort(t *testing.T) {
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	port := busy.Addr().(*net.TCPAddr).Port
+	ln, got, err := listenFree("127.0.0.1", port, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln.Close()
+	if got == port {
+		t.Fatalf("got the busy port %d", got)
 	}
 }

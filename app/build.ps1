@@ -10,10 +10,12 @@ New-Item -ItemType Directory -Force $out | Out-Null
 $env:CGO_ENABLED = "0"; $env:GOARM = "7"
 foreach ($t in "windows/amd64","windows/arm64","linux/amd64","linux/arm64","linux/arm") {
   $os, $arch = $t.Split("/")
-  $name = "netmon-$os-$arch"; if ($os -eq "windows") { $name += ".exe" }
+  $name = "netmon-$os-$arch"; $gui = ""
+  # Windows: GUI program (tray icon, no console window)
+  if ($os -eq "windows") { $name += ".exe"; $gui = "-H windowsgui" }
   Write-Host "building $name"
   $env:GOOS = $os; $env:GOARCH = $arch
-  go build -trimpath -ldflags "-s -w -X main.version=$Version" -o (Join-Path $out $name) .
+  go build -trimpath -ldflags "-s -w $gui -X main.version=$Version" -o (Join-Path $out $name) .
   if ($LASTEXITCODE -ne 0) { throw "build failed: $t" }
 }
 Remove-Item Env:GOOS, Env:GOARCH

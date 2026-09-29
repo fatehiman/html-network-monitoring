@@ -167,6 +167,8 @@ type State struct {
 	Logs      []LogEntry      `json:"logs"`
 	SpeedBusy map[string]bool `json:"speedBusy"`
 	Version   string          `json:"version"`
+	// NativeSound: the program plays the beeps itself (Windows tray), so the page must not.
+	NativeSound bool `json:"nativeSound"`
 }
 
 func (e *Engine) State() State {
@@ -181,6 +183,8 @@ func (e *Engine) State() State {
 		Logs:      append([]LogEntry{}, e.logs...),
 		SpeedBusy: map[string]bool{"dl": e.speedBusy["dl"], "ul": e.speedBusy["ul"]},
 		Version:   version,
+
+		NativeSound: nativeSound,
 	}
 }
 
@@ -227,6 +231,7 @@ type ConfigPatch struct {
 	DLInterval  *int    `json:"dlInterval"`
 	ULInterval  *int    `json:"ulInterval"`
 	SpeedServer *string `json:"speedServer"`
+	SoundMode   *string `json:"soundMode"`
 }
 
 func (e *Engine) UpdateConfig(p ConfigPatch) Config {
@@ -247,6 +252,9 @@ func (e *Engine) UpdateConfig(p ConfigPatch) Config {
 	}
 	if p.SpeedServer != nil {
 		e.cfg.SpeedServer = *p.SpeedServer
+	}
+	if p.SoundMode != nil {
+		e.cfg.SoundMode = *p.SoundMode
 	}
 	e.cfg.normalize()
 	if e.cfg.DLInterval != oldDL {

@@ -29,6 +29,7 @@ type Config struct {
 	ULInterval  int      `json:"ulInterval"`  // minutes, 0 = off
 	SpeedServer string   `json:"speedServer"` // "ookla" | "cloudflare"
 	UserURLs    []string `json:"userUrls"`    // max 5, oldest first
+	SoundMode   string   `json:"soundMode"`   // "off" | "on" | "err"
 }
 
 func defaultConfig() Config {
@@ -37,6 +38,7 @@ func defaultConfig() Config {
 		Interval:    3,
 		SpeedServer: "ookla",
 		UserURLs:    []string{},
+		SoundMode:   "off",
 	}
 }
 
@@ -59,6 +61,9 @@ func (c *Config) normalize() {
 	}
 	if c.SpeedServer != "cloudflare" {
 		c.SpeedServer = "ookla"
+	}
+	if c.SoundMode != "on" && c.SoundMode != "err" {
+		c.SoundMode = "off"
 	}
 	if c.UserURLs == nil {
 		c.UserURLs = []string{}

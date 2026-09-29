@@ -3,6 +3,7 @@
 // All measuring runs inside this program, so it never slows down or stops the
 // way browser timers do in hidden tabs. The UI is a web page served on
 // localhost; it only shows data and can be closed at any time.
+// On Windows the program lives in the system tray (tray_windows.go).
 package main
 
 import (
@@ -18,7 +19,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
+
+	"netmon/internal/icon"
 )
 
 var version = "dev" // set by build: -ldflags "-X main.version=..."
@@ -27,14 +31,19 @@ const userAgent = "Mozilla/5.0 (netmon) AppleWebKit/537.36 (KHTML, like Gecko) C
 
 var quiet bool
 
+// instanceLock must stay referenced for the whole run: if it were garbage-collected,
+// the file would be closed and the single-instance lock released.
+var instanceLock *os.File
+
 //go:embed web
 var webFS embed.FS
 
 func main() {
+	attachConsole() // Windows GUI build: print to the terminal if started from one
 	listen := flag.String("listen", "127.0.0.1", "address to listen on (use 0.0.0.0 to allow other PCs on the LAN)")
-	port := flag.Int("port", 8765, "HTTP port of the UI")
+	port := flag.Int("port", 8765, "HTTP port of the UI; if it is used by another program, the next free port is used")
 	dataDir := flag.String("data", defaultDataDir(), "folder for config and measurement data")
-	noBrowser := flag.Bool("no-browser", false, "do not open the UI in a browser at start")
+	noBrowser := flag.Bool("no-browser", false, "Linux: do not open the UI in a browser at start")
 	flag.BoolVar(&quiet, "quiet", false, "do not print the log to the console")
 	showVer := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -43,36 +52,61 @@ func main() {
 		return
 	}
 
-	addr := net.JoinHostPort(*listen, fmt.Sprint(*port))
-	uiURL := fmt.Sprintf("http://%s/", net.JoinHostPort(browseHost(*listen), fmt.Sprint(*port)))
-
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		// Probably already running: just show the existing instance.
-		if isNetmon(uiURL) {
-			fmt.Println("netmon is already running at", uiURL)
-			if !*noBrowser {
-				openBrowser(uiURL)
-			}
-			return
-		}
-		log.Fatalf("cannot listen on %s: %v", addr, err)
-	}
-
 	if err := os.MkdirAll(*dataDir, 0o755); err != nil {
-		log.Fatalf("data folder: %v", err)
+		fatal("Cannot create the data folder:\n%s\n\n%v", *dataDir, err)
 	}
+	// Only one netmon per data folder. The lock is released by the OS when the process ends.
+	var err error
+	instanceLock, err = lockInstance(filepath.Join(*dataDir, "netmon.lock"))
+	if err != nil {
+		msg := "netmon is already running."
+		if u := readRunningURL(filepath.Join(*dataDir, "netmon.lock")); u != "" {
+			msg += "\n\nIts UI is at " + u
+		}
+		fatal("%s", msg)
+	}
+
+	ln, gotPort, err := listenFree(*listen, *port, 100)
+	if err != nil {
+		fatal("Cannot open a port for the UI: %v", err)
+	}
+	uiURL := fmt.Sprintf("http://%s/", net.JoinHostPort(browseHost(*listen), fmt.Sprint(gotPort)))
+	instanceLock.Truncate(0)
+	instanceLock.WriteAt([]byte(uiURL), 0)
+
 	eng, err := newEngine(*dataDir)
 	if err != nil {
-		log.Fatalf("init: %v", err)
+		fatal("Cannot start: %v", err)
 	}
-
-	fmt.Printf("netmon %s\n  UI:   %s\n  data: %s\n  Close this window (or Ctrl+C) to stop monitoring.\n\n", version, uiURL, *dataDir)
+	if gotPort != *port {
+		log.Printf("port %d is used by another program — using %d", *port, gotPort)
+	}
+	fmt.Printf("netmon %s\n  UI:   %s\n  data: %s\n\n", version, uiURL, *dataDir)
 	eng.Start()
-	if !*noBrowser {
-		go func() { time.Sleep(300 * time.Millisecond); openBrowser(uiURL) }()
+	go func() { log.Fatal(http.Serve(ln, newMux(eng))) }()
+
+	runFrontend(eng, uiURL, !*noBrowser) // tray on Windows, console on Linux; returns on exit
+}
+
+// listenFree tries port, port+1, ... and returns the first one that is free.
+func listenFree(host string, port, tries int) (net.Listener, int, error) {
+	var lastErr error
+	for p := port; p < port+tries && p <= 65535; p++ {
+		ln, err := net.Listen("tcp", net.JoinHostPort(host, fmt.Sprint(p)))
+		if err == nil {
+			return ln, p, nil
+		}
+		lastErr = err
 	}
-	log.Fatal(http.Serve(ln, newMux(eng)))
+	return nil, 0, lastErr
+}
+
+func readRunningURL(lockPath string) string {
+	b, err := os.ReadFile(lockPath)
+	if err != nil || !strings.HasPrefix(string(b), "http") {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 func defaultDataDir() string {
@@ -87,16 +121,6 @@ func browseHost(listen string) string {
 		return "127.0.0.1"
 	}
 	return listen
-}
-
-func isNetmon(url string) bool {
-	c := &http.Client{Timeout: 2 * time.Second}
-	resp, err := c.Get(url + "api/ping")
-	if err != nil {
-		return false
-	}
-	resp.Body.Close()
-	return resp.Header.Get("X-Netmon") != ""
 }
 
 func openBrowser(url string) {
@@ -124,6 +148,11 @@ func newMux(e *Engine) http.Handler {
 	sub, _ := fs.Sub(webFS, "web")
 	mux.Handle("GET /", http.FileServer(http.FS(sub)))
 
+	favicon := icon.ICO(icon.Green, 16, 32, 48)
+	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/x-icon")
+		w.Write(favicon)
+	})
 	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, e.State()) })
 	mux.HandleFunc("GET /api/range", func(w http.ResponseWriter, r *http.Request) {

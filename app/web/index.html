@@ -191,7 +191,7 @@ function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&
 
 async function loadState() {
   const st = await getJSON('/api/state');
-  cfg = st.config; presets = st.presets; running = st.running;
+  cfg = st.config; presets = st.presets; running = st.running; nativeSound = st.nativeSound;
   liveKey = st.liveKey; rangeKeys = st.ranges; speedBusy = st.speedBusy;
   applyConfig(true);
   setRunningUI();
@@ -259,6 +259,7 @@ function applyConfig(force) {
   set('urlInput', 'url'); set('intervalInput', 'interval');
   set('dlInterval', 'dlInterval'); set('ulInterval', 'ulInterval');
   set('speedServer', 'speedServer');
+  if (cfg.soundMode !== soundMode) showSoundMode(cfg.soundMode);
   renderUrlMenu();
 }
 const pending = {}; let pendingTimer = null;
@@ -494,20 +495,30 @@ function updateStats() {
 }
 
 // ===================== AUDIO =====================
+// The sound mode is saved in netmon's config. On Windows the program beeps
+// itself (tray app, works with no browser open), so the page stays silent.
 let audioCtx = null, audioUnlocked = false;
-let soundMode = 'off'; // 'off' | 'on' | 'err' — not saved, always starts muted
+let soundMode = 'off'; // 'off' | 'on' | 'err'
+let nativeSound = false;
 function setSoundMode(mode) {
+  showSoundMode(mode);
+  api('/api/config', {soundMode: mode});
+}
+function showSoundMode(mode) {
   soundMode = mode;
-  if (mode !== 'off') {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    audioCtx.resume().then(() => { audioUnlocked = true; });
-  }
+  if (mode !== 'off' && !nativeSound) unlockAudio();
   $('sndOff').className = 'sound-btn' + (mode === 'off' ? ' active-on' : '');
   $('sndOn').className = 'sound-btn' + (mode === 'on' ? ' active-on' : '');
   $('sndErr').className = 'sound-btn' + (mode === 'err' ? ' active-err' : '');
 }
+function unlockAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx.resume().then(() => { audioUnlocked = true; });
+}
+// Browsers allow audio only after a click on the page.
+document.addEventListener('click', () => { if (soundMode !== 'off' && !nativeSound) unlockAudio(); });
 function beep(freq, ms) {
-  if (soundMode === 'off' || !audioCtx || !audioUnlocked || audioCtx.state === 'suspended') return;
+  if (nativeSound || soundMode === 'off' || !audioCtx || !audioUnlocked || audioCtx.state === 'suspended') return;
   const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
   o.frequency.value = freq; g.gain.value = 0.15; o.start(); o.stop(audioCtx.currentTime + ms / 1000);
 }
