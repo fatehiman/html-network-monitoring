@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>netmon — HTTPS Response Time Monitor</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{height:100%}
+  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',system-ui,sans-serif;padding:12px 20px;height:100%;overflow:auto}
+  h1{font-size:1.2rem;font-weight:600;color:#fff;margin-bottom:0}
+  .top-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .top-left{display:flex;flex-direction:column;gap:6px}
+  .header-line{display:flex;align-items:center;gap:16px}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .controls label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .controls input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:6px;font-size:.82rem;width:280px;outline:none}
+  .controls input:focus{border-color:#4a90d9}
+  .btn{padding:4px 14px;border:none;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .15s}
+  .btn-toggle{background:#2d3748;color:#fff;min-width:34px;font-size:.95rem;padding:4px 8px}
+  .btn-toggle:hover{background:#4a5568}
+  .btn-clear{background:#2d3748;color:#8395a7}.btn-clear:hover{background:#4a5568;color:#fff}
+  .range-select{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:6px;font-size:.8rem;outline:none;cursor:pointer;min-width:210px}
+  .range-select:focus{border-color:#4a90d9}
+  .range-select option{background:#141a2a;color:#fff}
+  .stats{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .stat{background:#141a2a;border:1px solid #2d3748;border-radius:6px;padding:4px 10px;min-width:90px}
+  .stat .label{font-size:.55rem;text-transform:uppercase;letter-spacing:.5px;color:#576574;margin-bottom:1px}
+  .stat .value{font-size:.95rem;font-weight:700;color:#fff}
+  .stat .value.good{color:#2ecc71}.stat .value.warn{color:#f39c12}.stat .value.bad{color:#e74c3c}
+  .chart-wrap{background:#141a2a;border:1px solid #2d3748;border-radius:10px;padding:8px 16px 6px;position:relative}
+  .tag-strip{position:relative;height:20px;margin-bottom:2px;overflow:hidden}
+  .tag-bar{position:absolute;top:0;height:18px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:600;color:#fff;overflow:hidden;white-space:nowrap;cursor:default;user-select:none;text-shadow:0 0 2px rgba(0,0,0,.5)}
+  canvas{width:100%!important;display:block}
+  .log{margin-top:10px;background:#141a2a;border:1px solid #2d3748;border-radius:10px;padding:8px 12px;min-height:120px;overflow-y:auto;font-family:'Cascadia Code',monospace;font-size:.7rem;line-height:1.55}
+  .log-entry{color:#576574}.log-entry .time{color:#4a90d9}.log-entry .ms{color:#2ecc71}.log-entry .err{color:#e74c3c}
+  .status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}
+  .status-dot.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}.status-dot.off{background:#576574}.status-dot.lost{background:#e74c3c}
+  .sound-toggle{display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
+  .sound-label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .sound-btn{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:.68rem;font-weight:600;transition:all .15s;white-space:nowrap}
+  .sound-btn:hover{background:#4a5568;color:#fff}
+  .sound-btn.active-on{background:#27ae60;color:#fff}
+  .sound-btn.active-err{background:#e67e22;color:#fff}
+  .range-row{display:flex;align-items:center;gap:6px}
+  .range-row label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+  .tag-controls{display:flex;align-items:center;gap:5px}
+  .tag-controls label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .tag-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.8rem;width:120px;outline:none}
+  .tag-input:focus{border-color:#4a90d9}
+  .btn-tag{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.85rem;transition:all .15s}
+  .btn-tag:hover{background:#4a5568;color:#fff}
+  .speed-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .speed-row label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+  .speed-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.8rem;width:46px;outline:none;text-align:center}
+  .speed-input:focus{border-color:#4a90d9}
+  .speed-select{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:3px 4px;border-radius:6px;font-size:.72rem;outline:none;cursor:pointer}
+  .btn-speed{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.7rem;font-weight:600;transition:all .15s;white-space:nowrap;min-width:52px}
+  .btn-speed:hover{background:#4a5568;color:#fff}
+  .btn-speed.testing{background:#4a90d9;color:#fff}
+  .speed-unit{font-size:.6rem;color:#576574}
+  /* URL picker */
+  .url-box{position:relative;display:flex;gap:3px;align-items:center}
+  .btn-mini{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:.8rem;line-height:1;height:26px;transition:all .15s}
+  .btn-mini:hover{background:#4a5568;color:#fff}
+  .url-menu{display:none;position:absolute;top:30px;left:0;z-index:10;background:#141a2a;border:1px solid #2d3748;border-radius:8px;min-width:420px;max-width:90vw;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+  .url-menu.open{display:block}
+  .url-menu .sec{font-size:.58rem;text-transform:uppercase;letter-spacing:.5px;color:#576574;padding:4px 10px 2px}
+  .url-item{display:flex;align-items:center;gap:8px;padding:4px 10px;cursor:pointer;font-size:.75rem}
+  .url-item:hover{background:#1e2a3a}
+  .url-item.sel{color:#4a90d9}
+  .url-item .nm{color:#fff;min-width:92px;font-weight:600}
+  .url-item .u{color:#8395a7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .url-item .x{color:#576574;padding:0 4px;border-radius:4px}
+  .url-item .x:hover{color:#fff;background:#e74c3c}
+  .url-menu .empty{font-size:.7rem;color:#576574;padding:3px 10px 5px}
+</style>
+</head>
+<body>
+
+<div class="top-row">
+  <div class="top-left">
+    <div class="header-line">
+      <h1>📡 HTTPS Response Time Monitor</h1>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-toggle" id="toggleBtn" onclick="api('/api/toggle')" title="Pause/Resume">⏸</button>
+        <button class="btn btn-clear" onclick="clearAllData()">Clear</button>
+        <div class="sound-toggle">
+          <span class="sound-label">🔊</span>
+          <button class="sound-btn active-on" id="sndOff" onclick="setSoundMode('off')">Off</button>
+          <button class="sound-btn" id="sndOn" onclick="setSoundMode('on')">On</button>
+          <button class="sound-btn" id="sndErr" onclick="setSoundMode('err')">Err</button>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <div>
+        <label>Target URL</label><br>
+        <div class="url-box">
+          <input type="text" id="urlInput" spellcheck="false">
+          <button class="btn-mini" onclick="addUserURL()" title="Add this URL to the list (last 5 are kept)">+</button>
+          <button class="btn-mini" id="urlMenuBtn" onclick="toggleUrlMenu(event)" title="Choose a URL">▾</button>
+          <div class="url-menu" id="urlMenu"></div>
+        </div>
+      </div>
+      <div>
+        <label>Interval (sec)</label><br>
+        <input type="number" id="intervalInput" value="3" min="1" max="300" style="width:60px">
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
+    <div class="range-row">
+      <label>Range</label>
+      <select class="range-select" id="rangeSelect" onchange="onRangeChange()"></select>
+    </div>
+    <div class="tag-controls">
+      <label>Tag:</label>
+      <input type="text" class="tag-input" id="tagInput" placeholder="e.g. WiFi-Home" onkeydown="if(event.key==='Enter')addTag()">
+      <button class="btn-tag" onclick="addTag()" title="Add tag">⏎</button>
+    </div>
+    <div class="speed-row">
+      <select class="speed-select" id="speedServer" title="Speed test server">
+        <option value="ookla">Ookla (nearest)</option>
+        <option value="cloudflare">Cloudflare</option>
+      </select>
+      <button class="btn-speed" id="dlBtn" onclick="api('/api/speed',{type:'dl'})" title="Test download speed">⬇ DL</button>
+      <input type="number" class="speed-input" id="dlInterval" value="0" min="0" max="999" title="Auto-test interval in minutes (0=off)">
+      <span class="speed-unit">min</span>
+      <button class="btn-speed" id="ulBtn" onclick="api('/api/speed',{type:'ul'})" title="Test upload speed">⬆ UL</button>
+      <input type="number" class="speed-input" id="ulInterval" value="0" min="0" max="999" title="Auto-test interval in minutes (0=off)">
+      <span class="speed-unit">min</span>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="label">Status</div><div class="value" id="statStatus"><span class="status-dot off"></span>Connecting</div></div>
+  <div class="stat"><div class="label">Last RTT</div><div class="value" id="statLast">—</div></div>
+  <div class="stat"><div class="label">Average</div><div class="value" id="statAvg">—</div></div>
+  <div class="stat"><div class="label">Min</div><div class="value" id="statMin">—</div></div>
+  <div class="stat"><div class="label">Max</div><div class="value" id="statMax">—</div></div>
+  <div class="stat"><div class="label">Requests</div><div class="value" id="statCount">0</div></div>
+  <div class="stat"><div class="label">Failures</div><div class="value" id="statFail">0</div></div>
+  <div class="stat"><div class="label">Jitter</div><div class="value" id="statJitter">—</div></div>
+</div>
+
+<div class="chart-wrap">
+  <div class="tag-strip" id="tagStrip"></div>
+  <canvas id="chart"></canvas>
+</div>
+
+<div class="log" id="log"></div>
+
+<script>
+// All measuring happens in the netmon program. This page only shows the data,
+// so it does not matter if the browser slows it down or you close it.
+
+// ===================== CONFIG =====================
+const Y_MAX = 5000;
+const RANGE_MS = 2 * 60 * 60 * 1000;
+const MIN_ACTIVE_TAG_PX = 60;
+const MIN_CLOSED_TAG_PX = 5;
+const CHART_H = 320;
+const DL_ROW_H = 16;
+const UL_ROW_H = 16;
+const SPEED_GAP = 2;
+const TOTAL_CANVAS_H = CHART_H + SPEED_GAP + DL_ROW_H + UL_ROW_H;
+const $ = id => document.getElementById(id);
+
+// ===================== STATE =====================
+let cfg = null, presets = [], running = true, connected = false;
+let liveKey = null, rangeKeys = [];
+let viewingRangeKey = null;
+let viewing = {points: [], tags: [], speed: []}; // points: [{time:Date, ms}]
+let speedBusy = {dl: false, ul: false};
+
+const canvas = $('chart');
+const ctx = canvas.getContext('2d');
+
+// ===================== API =====================
+async function api(path, body) {
+  try {
+    const r = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Netmon': '1'}, body: JSON.stringify(body || {})});
+    if (!r.ok) throw new Error(await r.text());
+    return await r.json();
+  } catch (e) { log('Request failed: ' + esc(e.message), true); return null; }
+}
+async function getJSON(path) { const r = await fetch(path, {cache: 'no-store'}); return r.json(); }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function loadState() {
+  const st = await getJSON('/api/state');
+  cfg = st.config; presets = st.presets; running = st.running;
+  liveKey = st.liveKey; rangeKeys = st.ranges; speedBusy = st.speedBusy;
+  applyConfig(true);
+  setRunningUI();
+  setSpeedBusyUI();
+  if (!viewingRangeKey || !rangeKeys.includes(viewingRangeKey)) viewingRangeKey = liveKey;
+  populateRangeSelect();
+  $('log').innerHTML = '';
+  for (const l of st.logs) addLogLine(l.t, l.msg, l.err);
+  await loadViewing();
+}
+
+async function loadViewing() {
+  const key = viewingRangeKey;
+  const rd = await getJSON('/api/range?key=' + encodeURIComponent(key));
+  if (key !== viewingRangeKey) return;
+  viewing = {points: rd.points.map(p => ({time: new Date(p[0]), ms: p[1]})), tags: rd.tags, speed: rd.speed};
+  refreshView();
+}
+function refreshView() { updateStats(); drawChart(); renderTags(); }
+
+// ===================== LIVE EVENTS =====================
+function connectEvents() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => { connected = true; loadState().catch(() => {}); };
+  es.onerror = () => { if (connected) { connected = false; setRunningUI(); log('Lost connection to netmon — is the program still running?', true); } };
+  es.onmessage = ev => {
+    const m = JSON.parse(ev.data), d = m.data;
+    switch (m.type) {
+      case 'probe': if (soundMode === 'on') beep(300, 50); break;
+      case 'point': {
+        const ms = d.p[1];
+        if (soundMode === 'on') beep(ms === null || ms >= 3000 ? 1000 : 250, 50);
+        else if (soundMode === 'err' && (ms === null || ms >= 3000)) beep(1000, 50);
+        if (d.key === viewingRangeKey) { viewing.points.push({time: new Date(d.p[0]), ms: ms}); refreshView(); }
+        break;
+      }
+      case 'range': {
+        liveKey = d.live; rangeKeys = d.ranges;
+        const follow = viewingRangeKey === d.prev;
+        if (follow) viewingRangeKey = liveKey;
+        populateRangeSelect();
+        if (follow) loadViewing();
+        break;
+      }
+      case 'log': addLogLine(d.t, d.msg, d.err); break;
+      case 'tags': if (d.key === viewingRangeKey) { viewing.tags = d.tags; refreshView(); } break;
+      case 'speed': if (d.key === viewingRangeKey) { viewing.speed = d.speed; drawChart(); } break;
+      case 'speedstate': speedBusy = d; setSpeedBusyUI(); break;
+      case 'speedprogress': {
+        const b = $(d.type === 'dl' ? 'dlBtn' : 'ulBtn');
+        if (speedBusy[d.type]) b.textContent = (d.type === 'dl' ? '⬇ ' : '⬆ ') + fmtMbps(d.mbps);
+        break;
+      }
+      case 'config': cfg = d; applyConfig(false); break;
+      case 'running': running = d; setRunningUI(); break;
+      case 'cleared': loadState(); break;
+    }
+  };
+}
+
+// ===================== CONFIG UI =====================
+function applyConfig(force) {
+  // Do not overwrite a field the user is typing in, or one with an unsaved change.
+  const set = (id, field) => { if (force || (document.activeElement !== $(id) && !(field in pending))) $(id).value = cfg[field]; };
+  set('urlInput', 'url'); set('intervalInput', 'interval');
+  set('dlInterval', 'dlInterval'); set('ulInterval', 'ulInterval');
+  set('speedServer', 'speedServer');
+  renderUrlMenu();
+}
+const pending = {}; let pendingTimer = null;
+function queueConfig(field, value) {
+  pending[field] = value;
+  clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => { const p = Object.assign({}, pending); for (const k in pending) delete pending[k]; api('/api/config', p); }, 400);
+}
+function bindInput(id, field, num) {
+  const h = () => { const v = $(id).value; queueConfig(field, num ? (parseInt(v) || 0) : v); };
+  $(id).addEventListener('input', h); $(id).addEventListener('change', h);
+}
+bindInput('urlInput', 'url', false);
+bindInput('intervalInput', 'interval', true);
+bindInput('dlInterval', 'dlInterval', true);
+bindInput('ulInterval', 'ulInterval', true);
+bindInput('speedServer', 'speedServer', false);
+
+// ===================== URL PICKER =====================
+function renderUrlMenu() {
+  const m = $('urlMenu'), cur = $('urlInput').value.trim();
+  let h = '<div class="sec">Presets</div>';
+  for (const p of presets)
+    h += '<div class="url-item' + (p.url === cur ? ' sel' : '') + '" data-url="' + esc(p.url) + '"><span class="nm">' + esc(p.name) + '</span><span class="u">' + esc(p.url) + '</span></div>';
+  h += '<div class="sec">My URLs (last 5)</div>';
+  if (!cfg.userUrls.length) h += '<div class="empty">Type a URL and press + to add it here.</div>';
+  for (const u of cfg.userUrls)
+    h += '<div class="url-item' + (u === cur ? ' sel' : '') + '" data-url="' + esc(u) + '"><span class="u">' + esc(u) + '</span><span class="x" data-del="' + esc(u) + '" title="Remove">✕</span></div>';
+  m.innerHTML = h;
+}
+$('urlMenu').addEventListener('click', e => {
+  e.stopPropagation();
+  const del = e.target.closest('[data-del]');
+  if (del) { api('/api/urls/remove', {url: del.dataset.del}); return; }
+  const it = e.target.closest('.url-item');
+  if (!it) return;
+  $('urlInput').value = it.dataset.url;
+  clearTimeout(pendingTimer); delete pending.url;
+  api('/api/config', {url: it.dataset.url});
+  log('Target URL: ' + esc(it.dataset.url));
+  $('urlMenu').classList.remove('open');
+});
+function toggleUrlMenu(e) { e.stopPropagation(); renderUrlMenu(); $('urlMenu').classList.toggle('open'); }
+document.addEventListener('click', () => $('urlMenu').classList.remove('open'));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('urlMenu').classList.remove('open'); });
+function addUserURL() {
+  const u = $('urlInput').value.trim();
+  if (!u) return;
+  if (presets.some(p => p.url === u)) { log('This URL is already a preset'); return; }
+  clearTimeout(pendingTimer); delete pending.url; // the add call also sets the target URL
+  api('/api/urls/add', {url: u}).then(c => { if (c) log('URL added to list: ' + esc(u)); });
+}
+
+// ===================== CONTROLS =====================
+function setRunningUI() {
+  $('toggleBtn').textContent = running ? '⏸' : '▶';
+  $('toggleBtn').title = running ? 'Pause' : 'Resume';
+  $('statStatus').innerHTML = !connected ? '<span class="status-dot lost"></span>No connection'
+    : running ? '<span class="status-dot on"></span>Running' : '<span class="status-dot off"></span>Paused';
+}
+function setSpeedBusyUI() {
+  for (const t of ['dl', 'ul']) {
+    const b = $(t + 'Btn'), arrow = t === 'dl' ? '⬇ ' : '⬆ ';
+    b.classList.toggle('testing', !!speedBusy[t]);
+    b.textContent = speedBusy[t] ? arrow + '…' : arrow + t.toUpperCase();
+  }
+}
+function clearAllData() {
+  if (!confirm('Clear ALL stored monitoring data, tags, and speed results? This cannot be undone.')) return;
+  api('/api/clear');
+}
+function addTag() {
+  const t = $('tagInput').value.trim();
+  if (!t) return;
+  api('/api/tag', {text: t}).then(r => { if (r) $('tagInput').value = ''; });
+}
+
+// ===================== TAG UI =====================
+function getChartLayout() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width - 32;
+  return {W: W, padLeft: 60, padRight: 20, cw: W - 60 - 20};
+}
+function renderTags() {
+  const strip = $('tagStrip');
+  strip.innerHTML = '';
+  if (!viewingRangeKey || !viewing.tags.length) return;
+  const tStart = rangeKeyToStartDate(viewingRangeKey).getTime();
+  const layout = getChartLayout();
+  const now = Date.now();
+  const isLive = viewingRangeKey === liveKey;
+  viewing.tags.forEach((tag, i) => {
+    const tS = Math.max(tag.start, tStart);
+    const tE = tag.end !== null ? tag.end : (isLive ? now : tStart);
+    const xStart = layout.padLeft + ((tS - tStart) / RANGE_MS) * layout.cw;
+    let w = ((tE - tStart) / RANGE_MS) * layout.cw + layout.padLeft - xStart;
+    const isActive = tag.end === null && isLive;
+    if (!isActive && w < MIN_CLOSED_TAG_PX) return;
+    if (isActive && w < MIN_ACTIVE_TAG_PX) w = MIN_ACTIVE_TAG_PX;
+    const el = document.createElement('div');
+    el.className = 'tag-bar';
+    el.style.left = xStart + 'px'; el.style.width = w + 'px'; el.style.background = tag.color;
+    el.textContent = tag.text;
+    el.title = tag.text + ' (right-click to remove)';
+    const rk = viewingRangeKey;
+    el.addEventListener('contextmenu', e => { e.preventDefault(); api('/api/tag/delete', {key: rk, idx: i}); });
+    strip.appendChild(el);
+  });
+}
+
+// ===================== RANGES =====================
+function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+function rangeKeyToStartDate(k) {
+  const p = k.split(' '), d = p[0].split('/'), t = p[1].split('-')[0].split(':');
+  return new Date(+d[0], +d[1] - 1, +d[2], +t[0], +t[1], 0, 0);
+}
+function populateRangeSelect() {
+  const sel = $('rangeSelect');
+  sel.innerHTML = '';
+  for (let i = rangeKeys.length - 1; i >= 0; i--) { const o = document.createElement('option'); o.value = rangeKeys[i]; o.textContent = rangeKeys[i]; sel.appendChild(o); }
+  sel.value = viewingRangeKey;
+}
+function onRangeChange() { viewingRangeKey = $('rangeSelect').value; loadViewing(); }
+
+// ===================== CANVAS =====================
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width - 32;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = TOTAL_CANVAS_H * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = TOTAL_CANVAS_H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawChart(); renderTags();
+}
+function resizeLog() {
+  const logEl = $('log');
+  const top = logEl.getBoundingClientRect().top + window.scrollY;
+  const avail = window.innerHeight - top - 14;
+  logEl.style.height = (avail >= 120 ? avail : 120) + 'px';
+}
+window.addEventListener('resize', () => { resizeCanvas(); resizeLog(); });
+
+function fmtMbps(v) { return v < 10 ? v.toFixed(1) : String(Math.round(v)); }
+
+function drawChart() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const pad = {top: 16, right: 20, bottom: 24, left: 60};
+  const cw = W - pad.left - pad.right;
+  const ch = CHART_H - pad.top - pad.bottom;
+  ctx.clearRect(0, 0, W, TOTAL_CANVAS_H);
+  if (!viewingRangeKey) return;
+
+  const tStart = rangeKeyToStartDate(viewingRangeKey);
+  const tEnd = new Date(tStart.getTime() + RANGE_MS);
+  const X = t => pad.left + ((t - tStart.getTime()) / RANGE_MS) * cw;
+  const Y = ms => pad.top + ch - (Math.min(ms, Y_MAX) / Y_MAX) * ch;
+
+  // Grid
+  ctx.strokeStyle = '#1e2a3a'; ctx.lineWidth = 1;
+  ctx.font = '10px system-ui'; ctx.fillStyle = '#576574'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= 5000; v += 500) { const y = Y(v); ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke(); ctx.fillText(v >= 1000 ? (v / 1000) + 's' : v + 'ms', pad.left - 6, y); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const xInt = 10 * 60 * 1000;
+  for (let t = Math.ceil(tStart.getTime() / xInt) * xInt; t <= tEnd.getTime(); t += xInt) { const x = X(t); ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, pad.top + ch); ctx.stroke(); ctx.fillText(fmtTime(new Date(t)), x, pad.top + ch + 4); }
+  ctx.fillStyle = '#8395a7'; ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+  ctx.save(); ctx.translate(12, pad.top + ch / 2); ctx.rotate(-Math.PI / 2); ctx.fillText('Response Time', 0, 0); ctx.restore();
+
+  // Data
+  const pts = viewing.points;
+  if (pts.length) {
+    const good = pts.filter(p => p.ms !== null), bad = pts.filter(p => p.ms === null);
+    if (good.length > 1) {
+      ctx.beginPath(); ctx.strokeStyle = '#4a90d9'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+      good.forEach((p, i) => { const x = X(p.time.getTime()), y = Y(p.ms); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+      ctx.stroke();
+      ctx.lineTo(X(good[good.length - 1].time.getTime()), pad.top + ch);
+      ctx.lineTo(X(good[0].time.getTime()), pad.top + ch);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      grad.addColorStop(0, 'rgba(74,144,217,0.25)'); grad.addColorStop(1, 'rgba(74,144,217,0.02)');
+      ctx.fillStyle = grad; ctx.fill();
+    }
+    for (const p of good) { ctx.beginPath(); ctx.arc(X(p.time.getTime()), Y(p.ms), 3, 0, Math.PI * 2); ctx.fillStyle = p.ms < 500 ? '#2ecc71' : p.ms < 2000 ? '#f39c12' : '#e74c3c'; ctx.fill(); }
+    for (const p of bad) { ctx.beginPath(); ctx.arc(X(p.time.getTime()), pad.top + 8, 4, 0, Math.PI * 2); ctx.fillStyle = '#e74c3c'; ctx.fill(); ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 1; ctx.stroke(); }
+  }
+
+  // Speed results below chart
+  const rows = [['dl', 'DL', '#4a90d9', CHART_H + SPEED_GAP], ['ul', 'UL', '#a29bfe', CHART_H + SPEED_GAP + DL_ROW_H]];
+  ctx.font = '9px system-ui'; ctx.textBaseline = 'top';
+  for (const [type, label, color, y] of rows) {
+    ctx.fillStyle = color; ctx.textAlign = 'right'; ctx.fillText(label, pad.left - 6, y);
+    ctx.strokeStyle = '#1e2a3a'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, y + DL_ROW_H / 2); ctx.lineTo(pad.left + cw, y + DL_ROW_H / 2); ctx.stroke();
+    ctx.textAlign = 'center';
+    for (const r of viewing.speed.filter(s => s.type === type)) {
+      ctx.fillStyle = r.mbps > 0 ? color : '#e74c3c';
+      ctx.fillText(r.mbps > 0 ? fmtMbps(r.mbps) : '✗', X(r.time), y + 1);
+    }
+  }
+}
+function fmtTime(d) { return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+
+// ===================== STATS =====================
+function updateStats() {
+  // On the live range, stats start at the active tag (so each network gets its own numbers).
+  let filtered = viewing.points;
+  if (viewingRangeKey === liveKey) {
+    const open = viewing.tags.length && viewing.tags[viewing.tags.length - 1];
+    if (open && open.end === null) filtered = filtered.filter(p => p.time.getTime() >= open.start);
+  }
+  const vals = filtered.filter(p => p.ms !== null).map(p => p.ms);
+  const fails = filtered.length - vals.length;
+  const setV = (id, text, cls) => { $(id).textContent = text; $(id).className = 'value' + (cls ? ' ' + cls : ''); };
+  setV('statCount', filtered.length);
+  setV('statFail', fails, fails > 0 ? 'bad' : '');
+  if (!vals.length) { for (const id of ['statLast', 'statAvg', 'statMin', 'statMax', 'statJitter']) setV(id, '—'); return; }
+  const cls = v => v < 500 ? 'good' : v < 2000 ? 'warn' : 'bad';
+  const last = vals[vals.length - 1], avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  let mn = Infinity, mx = -Infinity; for (const v of vals) { if (v < mn) mn = v; if (v > mx) mx = v; }
+  setV('statLast', last + ' ms', cls(last));
+  setV('statAvg', avg + ' ms', cls(avg));
+  setV('statMin', mn + ' ms', 'good');
+  setV('statMax', mx + ' ms', cls(mx));
+  // Jitter: avg of absolute consecutive diffs, last 40 samples
+  const recent = vals.slice(-40);
+  if (recent.length >= 2) {
+    let sum = 0; for (let i = 1; i < recent.length; i++) sum += Math.abs(recent[i] - recent[i - 1]);
+    const j = Math.round(sum / (recent.length - 1));
+    setV('statJitter', j + ' ms', j < 50 ? 'good' : j < 200 ? 'warn' : 'bad');
+  } else setV('statJitter', '—');
+}
+
+// ===================== AUDIO =====================
+let audioCtx = null, audioUnlocked = false;
+let soundMode = 'off'; // 'off' | 'on' | 'err' — not saved, always starts muted
+function setSoundMode(mode) {
+  soundMode = mode;
+  if (mode !== 'off') {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume().then(() => { audioUnlocked = true; });
+  }
+  $('sndOff').className = 'sound-btn' + (mode === 'off' ? ' active-on' : '');
+  $('sndOn').className = 'sound-btn' + (mode === 'on' ? ' active-on' : '');
+  $('sndErr').className = 'sound-btn' + (mode === 'err' ? ' active-err' : '');
+}
+function beep(freq, ms) {
+  if (soundMode === 'off' || !audioCtx || !audioUnlocked || audioCtx.state === 'suspended') return;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.value = freq; g.gain.value = 0.15; o.start(); o.stop(audioCtx.currentTime + ms / 1000);
+}
+
+// ===================== LOGGING =====================
+function addLogLine(t, msg, err) {
+  const el = $('log'), e = document.createElement('div'); e.className = 'log-entry';
+  const tm = '<span class="time">[' + fmtTime(new Date(t)) + ']</span> ';
+  e.innerHTML = err ? tm + '<span class="err">' + msg + '</span>' : tm + msg;
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+  el.appendChild(e);
+  while (el.children.length > 200) el.removeChild(el.firstChild);
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+function log(msg, err) { addLogLine(Date.now(), msg, err); } // local-only message
+
+// ===================== INIT =====================
+resizeCanvas(); resizeLog();
+connectEvents();
+setInterval(() => { if (viewingRangeKey === liveKey) renderTags(); }, 10000); // grow the active tag bar
+</script>
+</body>
+</html>
