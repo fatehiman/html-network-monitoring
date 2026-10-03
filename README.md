@@ -115,7 +115,7 @@ Then `sudo systemctl enable --now netmon` and open `http://<server-ip>:8765`.
 
 In the data folder:
 
-- `config.json` — target URL, intervals, speed server, your saved URLs, sound mode
+- `config.json` — target URL, intervals, speed server, your saved URLs, sound mode, auto-tag-by-IP checkbox
 - `ranges/YYYYMMDD-HH.json` — one file per 2-hour range: `{"points": [[timestampMs, ms|null], …], "tags": […], "speed": […]}`
 - `netmon.lock` — single-instance lock
 
@@ -127,8 +127,8 @@ Ranges older than 10 days are deleted; at most 120 ranges are kept.
 |---|---|---|---|
 | GET | `/api/state` | | config, presets, running, live range key, range list, last 200 log lines |
 | GET | `/api/range?key=2026/03/06 00:00-02:00` | | points, tags, speed results of one range |
-| GET | `/api/events` | | Server-Sent Events: `probe`, `point`, `range`, `log`, `tags`, `speed`, `speedstate`, `speedprogress`, `config`, `running`, `cleared` |
-| POST | `/api/config` | any of `url`, `interval`, `dlInterval`, `ulInterval`, `speedServer`, `soundMode` | new config |
+| GET | `/api/events` | | Server-Sent Events: `probe`, `point`, `range`, `log`, `tags`, `speed`, `speedstate`, `speedprogress`, `config`, `running`, `cleared`, `ip` |
+| POST | `/api/config` | any of `url`, `interval`, `dlInterval`, `ulInterval`, `speedServer`, `soundMode`, `autoTagIp` | new config |
 | POST | `/api/urls/add` / `/api/urls/remove` | `{"url": "…"}` | new config |
 | POST | `/api/toggle` | | `true` = running |
 | POST | `/api/tag` | `{"text": "4G"}` | |
@@ -220,6 +220,8 @@ Beeps are dropped (not queued) while the browser's `AudioContext` is suspended.
 - The active tag grows as time passes (at least 60 px wide). Adding a new tag closes the previous one.
 - Right-click a tag to delete it.
 - At a range boundary, the active tag is closed and continued in the new range.
+- **Exit IP:** the program asks `https://api.ipify.org/` for your public IP every 10 minutes and shows it in parentheses next to the "Auto tag" checkbox; hover over it to see when it was last checked.
+- **Auto tag (IP):** check the box to tag the chart with your exit IP automatically, exactly as if you typed it and pressed Enter. Whenever the IP changes, a new tag is added. The checkbox is saved in `config.json` and remembered on the next run (default: unchecked).
 
 ### 5. Speed tests (download and upload)
 
@@ -277,7 +279,7 @@ How it works now:
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │ 📡 HTTPS Response Time Monitor [⏸] [Clear] 🔊[Off|On|Err] [Range ▼]│
-│ [URL input][+][▾] [Interval]                      [Tag: ___ ⏎]   │
+│ [URL input][+][▾] [Interval]        [☐ Auto tag (IP)] [Tag: ___ ⏎] │
 │                               [Server ▼][⬇DL][_]min [⬆UL][_]min │
 ├──────────────────────────────────────────────────────────────────┤
 │ Status | Last | Average | Min | Max | Requests | Failures | Jitter│

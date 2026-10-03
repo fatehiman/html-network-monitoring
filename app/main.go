@@ -188,7 +188,9 @@ func newMux(e *Engine) http.Handler {
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, err
 		}
-		return e.UpdateConfig(p), nil
+		cfg := e.UpdateConfig(p)
+		e.maybeAutoTag()
+		return cfg, nil
 	})
 	post("/api/urls/add", func(b json.RawMessage) (any, error) {
 		var p struct{ URL string }

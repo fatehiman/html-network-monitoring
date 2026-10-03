@@ -47,6 +47,12 @@ type Engine struct {
 	ooklaAt    time.Time
 
 	probeClient *http.Client
+
+	// exit IP (api.ipify.org), refreshed on a timer and optionally auto-tagged
+	exitIP        string
+	exitIPAt      int64
+	autoTagLastIP string
+	ipifyClient   *http.Client
 }
 
 func newEngine(dataDir string) (*Engine, error) {
@@ -75,6 +81,7 @@ func newEngine(dataDir string) (*Engine, error) {
 				TLSHandshakeTimeout: probeTimeout,
 			},
 		},
+		ipifyClient: &http.Client{Timeout: 8 * time.Second},
 	}
 	st.Purge()
 	e.liveStart = rangeStart(time.Now())
@@ -86,6 +93,7 @@ func (e *Engine) Start() {
 	e.logf(false, "Monitor started — target: %s", html.EscapeString(e.cfg.URL))
 	go e.monitorLoop()
 	go e.speedWorker()
+	go e.ipifyLoop()
 	e.mu.Lock()
 	e.rescheduleLocked("dl")
 	e.rescheduleLocked("ul")
@@ -168,7 +176,9 @@ type State struct {
 	SpeedBusy map[string]bool `json:"speedBusy"`
 	Version   string          `json:"version"`
 	// NativeSound: the program plays the beeps itself (Windows tray), so the page must not.
-	NativeSound bool `json:"nativeSound"`
+	NativeSound bool   `json:"nativeSound"`
+	ExitIP      string `json:"exitIp"`
+	ExitIPAt    int64  `json:"exitIpAt"`
 }
 
 func (e *Engine) State() State {
@@ -185,6 +195,8 @@ func (e *Engine) State() State {
 		Version:   version,
 
 		NativeSound: nativeSound,
+		ExitIP:      e.exitIP,
+		ExitIPAt:    e.exitIPAt,
 	}
 }
 
@@ -232,6 +244,7 @@ type ConfigPatch struct {
 	ULInterval  *int    `json:"ulInterval"`
 	SpeedServer *string `json:"speedServer"`
 	SoundMode   *string `json:"soundMode"`
+	AutoTagIP   *bool   `json:"autoTagIp"`
 }
 
 func (e *Engine) UpdateConfig(p ConfigPatch) Config {
@@ -255,6 +268,9 @@ func (e *Engine) UpdateConfig(p ConfigPatch) Config {
 	}
 	if p.SoundMode != nil {
 		e.cfg.SoundMode = *p.SoundMode
+	}
+	if p.AutoTagIP != nil {
+		e.cfg.AutoTagIP = *p.AutoTagIP
 	}
 	e.cfg.normalize()
 	if e.cfg.DLInterval != oldDL {
@@ -351,6 +367,23 @@ func (e *Engine) AddTag(text string) error {
 	return nil
 }
 
+// maybeAutoTag adds a tag for the current exit IP if auto-tagging is on and
+// the IP is new (same behavior as the user typing the IP in and pressing Enter).
+func (e *Engine) maybeAutoTag() {
+	e.mu.Lock()
+	on := e.cfg.AutoTagIP
+	ip := e.exitIP
+	last := e.autoTagLastIP
+	e.mu.Unlock()
+	if !on || ip == "" || ip == last {
+		return
+	}
+	e.mu.Lock()
+	e.autoTagLastIP = ip
+	e.mu.Unlock()
+	e.AddTag(ip)
+}
+
 func (e *Engine) RemoveTag(key string, idx int) {
 	t, ok := parseRangeKey(key)
 	if !ok {
@@ -423,6 +456,45 @@ func (e *Engine) monitorLoop() {
 		case <-e.wake:
 		}
 	}
+}
+
+// ===================== EXIT IP =====================
+
+const ipifyInterval = 10 * time.Minute
+
+func (e *Engine) ipifyLoop() {
+	for {
+		e.fetchExitIP()
+		time.Sleep(ipifyInterval)
+	}
+}
+
+func (e *Engine) fetchExitIP() {
+	req, err := http.NewRequest("GET", "https://api.ipify.org/", nil)
+	if err != nil {
+		return
+	}
+	resp, err := e.ipifyClient.Do(req)
+	if err != nil {
+		e.logf(true, "Exit IP lookup failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 256))
+	if err != nil {
+		return
+	}
+	ip := strings.TrimSpace(string(b))
+	if ip == "" {
+		return
+	}
+	now := time.Now().UnixMilli()
+	e.mu.Lock()
+	e.exitIP = ip
+	e.exitIPAt = now
+	e.publishLocked("ip", map[string]any{"ip": ip, "at": now})
+	e.mu.Unlock()
+	e.maybeAutoTag()
 }
 
 func (e *Engine) probe(url string) (*int, string) {

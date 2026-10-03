@@ -46,6 +46,8 @@
   .range-row label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
   .tag-controls{display:flex;align-items:center;gap:5px}
   .tag-controls label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
+  .auto-tag-label{display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;white-space:nowrap}
+  .auto-tag-label input{cursor:pointer}
   .tag-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.8rem;width:120px;outline:none}
   .tag-input:focus{border-color:#4a90d9}
   .btn-tag{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.85rem;transition:all .15s}
@@ -115,6 +117,10 @@
       <select class="range-select" id="rangeSelect" onchange="onRangeChange()"></select>
     </div>
     <div class="tag-controls">
+      <label class="auto-tag-label" id="autoTagLabel">
+        <input type="checkbox" id="autoTagChk" onchange="toggleAutoTag()">
+        Auto tag (<span id="exitIpText">…</span>)
+      </label>
       <label>Tag:</label>
       <input type="text" class="tag-input" id="tagInput" placeholder="e.g. WiFi-Home" onkeydown="if(event.key==='Enter')addTag()">
       <button class="btn-tag" onclick="addTag()" title="Add tag">⏎</button>
@@ -174,6 +180,7 @@ let liveKey = null, rangeKeys = [];
 let viewingRangeKey = null;
 let viewing = {points: [], tags: [], speed: []}; // points: [{time:Date, ms}]
 let speedBusy = {dl: false, ul: false};
+let exitIp = '', exitIpAt = 0;
 
 const canvas = $('chart');
 const ctx = canvas.getContext('2d');
@@ -193,6 +200,7 @@ async function loadState() {
   const st = await getJSON('/api/state');
   cfg = st.config; presets = st.presets; running = st.running; nativeSound = st.nativeSound;
   liveKey = st.liveKey; rangeKeys = st.ranges; speedBusy = st.speedBusy;
+  exitIp = st.exitIp || ''; exitIpAt = st.exitIpAt || 0; updateExitIpUI();
   applyConfig(true);
   setRunningUI();
   setSpeedBusyUI();
@@ -246,6 +254,7 @@ function connectEvents() {
         break;
       }
       case 'config': cfg = d; applyConfig(false); break;
+      case 'ip': exitIp = d.ip; exitIpAt = d.at; updateExitIpUI(); break;
       case 'running': running = d; setRunningUI(); break;
       case 'cleared': loadState(); break;
     }
@@ -259,6 +268,7 @@ function applyConfig(force) {
   set('urlInput', 'url'); set('intervalInput', 'interval');
   set('dlInterval', 'dlInterval'); set('ulInterval', 'ulInterval');
   set('speedServer', 'speedServer');
+  $('autoTagChk').checked = !!cfg.autoTagIp;
   if (cfg.soundMode !== soundMode) showSoundMode(cfg.soundMode);
   renderUrlMenu();
 }
@@ -335,6 +345,11 @@ function addTag() {
   const t = $('tagInput').value.trim();
   if (!t) return;
   api('/api/tag', {text: t}).then(r => { if (r) $('tagInput').value = ''; });
+}
+function toggleAutoTag() { api('/api/config', {autoTagIp: $('autoTagChk').checked}); }
+function updateExitIpUI() {
+  $('exitIpText').textContent = exitIp || '…';
+  $('autoTagLabel').title = exitIpAt ? 'Last update: ' + new Date(exitIpAt).toLocaleString() : 'Not fetched yet';
 }
 
 // ===================== TAG UI =====================
@@ -536,7 +551,7 @@ function addLogLine(t, msg, err) {
 function log(msg, err) { addLogLine(Date.now(), msg, err); } // local-only message
 
 // ===================== INIT =====================
-resizeCanvas(); resizeLog();
+resizeCanvas(); resizeLog(); updateExitIpUI();
 connectEvents();
 setInterval(() => { if (viewingRangeKey === liveKey) renderTags(); }, 10000); // grow the active tag bar
 </script>

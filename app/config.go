@@ -30,6 +30,7 @@ type Config struct {
 	SpeedServer string   `json:"speedServer"` // "ookla" | "cloudflare"
 	UserURLs    []string `json:"userUrls"`    // max 5, oldest first
 	SoundMode   string   `json:"soundMode"`   // "off" | "on" | "err"
+	AutoTagIP   bool     `json:"autoTagIp"`   // tag the range automatically with the current exit IP
 }
 
 func defaultConfig() Config {
