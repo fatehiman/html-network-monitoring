@@ -4,7 +4,7 @@ A tool to watch your internet connection. It sends a small HTTPS request to a ta
 
 There are two versions:
 
-| | **netmon app** (recommended) | **Browser version** (`ping10.htm`) |
+| | **netmon app** (recommended) | **Browser version** (`ping11.htm`) |
 |---|---|---|
 | Runs as | One executable: Windows **system-tray** app, Linux console program | One HTML file opened in a browser |
 | Keeps measuring when the window is hidden / minimized / closed | **Yes** — measuring runs in the program, not in the page | No — browsers slow down and then stop timers in hidden tabs |
@@ -12,7 +12,7 @@ There are two versions:
 | Data saved in | Files in a data folder | Browser `localStorage` |
 | Works on a Linux server with no screen | Yes | No |
 
-Older browser versions (`ping7.htm` … `ping9.htm`) are kept for reference.
+Older browser versions (`ping7.htm` … `ping10.htm`) are kept for reference.
 
 ---
 
@@ -253,7 +253,7 @@ How it works now:
 
 ---
 
-## Browser version details (`ping10.htm`)
+## Browser version details (`ping11.htm`)
 
 **Single file**: HTML, CSS and JS in one file, no dependencies, no build. Works from `file:///` in Chrome/Edge/Firefox.
 
@@ -263,6 +263,8 @@ How it works now:
 
 **Why `setTimeout` instead of `setInterval`**: the next request is scheduled after the answer, so a 20-second answer does not cause overlapping requests.
 
+**Exit IP / Auto tag**: same feature as the netmon app — a public IP-check endpoint is polled every 10 minutes (plain `fetch`, which needs the endpoint to answer with CORS enabled; both built-in presets do). Click the IP (or "IP fetch error") text next to the "Auto tag" checkbox to pick a different endpoint or add/remove your own. Checking the box tags the chart with the exit IP automatically and re-tags when it changes. Everything is saved in `httpsmon_config` in `localStorage`.
+
 ### localStorage keys
 
 | Prefix | Example key | Value | Description |
@@ -270,7 +272,7 @@ How it works now:
 | `httpsmon_` | `httpsmon_2026/03/06 00:00-02:00` | `[[timestamp, ms\|null], ...]` | Ping points. `null` = failed |
 | `httpsmon_tags_` | `httpsmon_tags_2026/03/06 00:00-02:00` | `[{text, color, start, end}, ...]` | Tags of the range |
 | `httpsmon_speed_` | `httpsmon_speed_2026/03/06 00:00-02:00` | `[{time, type, mbps}, ...]` | Speed results (`type`: `"dl"` / `"ul"`) |
-| `httpsmon_config` | `httpsmon_config` | `{url, interval, dlInterval, ulInterval, userUrls}` | Saved config |
+| `httpsmon_config` | `httpsmon_config` | `{url, interval, dlInterval, ulInterval, userUrls, autoTagIp, ipUrl, ipUrlList}` | Saved config |
 
 - Ranges older than 10 days are purged; at most 120 ranges are kept.
 - If storage is full, old data is purged before saving config.
