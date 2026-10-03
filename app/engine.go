@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -48,11 +49,14 @@ type Engine struct {
 
 	probeClient *http.Client
 
-	// exit IP (api.ipify.org), refreshed on a timer and optionally auto-tagged
-	exitIP        string
-	exitIPAt      int64
+	// exit IP, refreshed on a timer and optionally auto-tagged
+	exitIP        string // last successfully fetched IP
+	exitIPOK      bool   // false if the most recent fetch failed
+	exitIPErr     string // error of the most recent fetch, if it failed
+	exitIPAt      int64  // time of the most recent fetch attempt
 	autoTagLastIP string
 	ipifyClient   *http.Client
+	ipifyWake     chan struct{} // wakes ipifyLoop early (endpoint changed)
 }
 
 func newEngine(dataDir string) (*Engine, error) {
@@ -82,6 +86,7 @@ func newEngine(dataDir string) (*Engine, error) {
 			},
 		},
 		ipifyClient: &http.Client{Timeout: 8 * time.Second},
+		ipifyWake:   make(chan struct{}, 1),
 	}
 	st.Purge()
 	e.liveStart = rangeStart(time.Now())
@@ -178,6 +183,8 @@ type State struct {
 	// NativeSound: the program plays the beeps itself (Windows tray), so the page must not.
 	NativeSound bool   `json:"nativeSound"`
 	ExitIP      string `json:"exitIp"`
+	ExitIPOK    bool   `json:"exitIpOk"`
+	ExitIPErr   string `json:"exitIpErr"`
 	ExitIPAt    int64  `json:"exitIpAt"`
 }
 
@@ -196,6 +203,8 @@ func (e *Engine) State() State {
 
 		NativeSound: nativeSound,
 		ExitIP:      e.exitIP,
+		ExitIPOK:    e.exitIPOK,
+		ExitIPErr:   e.exitIPErr,
 		ExitIPAt:    e.exitIPAt,
 	}
 }
@@ -245,6 +254,7 @@ type ConfigPatch struct {
 	SpeedServer *string `json:"speedServer"`
 	SoundMode   *string `json:"soundMode"`
 	AutoTagIP   *bool   `json:"autoTagIp"`
+	IPURL       *string `json:"ipUrl"`
 }
 
 func (e *Engine) UpdateConfig(p ConfigPatch) Config {
@@ -271,6 +281,10 @@ func (e *Engine) UpdateConfig(p ConfigPatch) Config {
 	}
 	if p.AutoTagIP != nil {
 		e.cfg.AutoTagIP = *p.AutoTagIP
+	}
+	if p.IPURL != nil && *p.IPURL != e.cfg.IPURL {
+		e.cfg.IPURL = *p.IPURL
+		e.wakeIpifyLocked()
 	}
 	e.cfg.normalize()
 	if e.cfg.DLInterval != oldDL {
@@ -316,6 +330,44 @@ func (e *Engine) RemoveUserURL(u string) Config {
 	e.cfg.UserURLs = out
 	e.saveConfigLocked()
 	return e.cfg
+}
+
+func (e *Engine) AddIPURL(u string) Config {
+	u = strings.TrimSpace(u)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if u != "" && !isIPPreset(u) {
+		e.cfg.IPURLList = addIPURL(e.cfg.IPURLList, u)
+		e.saveConfigLocked()
+	}
+	return e.cfg
+}
+
+func (e *Engine) RemoveIPURL(u string) Config {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := []string{}
+	for _, x := range e.cfg.IPURLList {
+		if x != u {
+			out = append(out, x)
+		}
+	}
+	e.cfg.IPURLList = out
+	if e.cfg.IPURL == u {
+		e.cfg.IPURL = ipPresets[0]
+		e.wakeIpifyLocked()
+	}
+	e.saveConfigLocked()
+	return e.cfg
+}
+
+// wakeIpifyLocked makes ipifyLoop fetch again right away instead of waiting out the interval.
+// Caller holds e.mu.
+func (e *Engine) wakeIpifyLocked() {
+	select {
+	case e.ipifyWake <- struct{}{}:
+	default:
+	}
 }
 
 // ===================== CONTROLS =====================
@@ -465,36 +517,65 @@ const ipifyInterval = 10 * time.Minute
 func (e *Engine) ipifyLoop() {
 	for {
 		e.fetchExitIP()
-		time.Sleep(ipifyInterval)
+		select {
+		case <-time.After(ipifyInterval):
+		case <-e.ipifyWake:
+		}
 	}
 }
 
 func (e *Engine) fetchExitIP() {
-	req, err := http.NewRequest("GET", "https://api.ipify.org/", nil)
-	if err != nil {
-		return
-	}
-	resp, err := e.ipifyClient.Do(req)
-	if err != nil {
-		e.logf(true, "Exit IP lookup failed: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 256))
-	if err != nil {
-		return
-	}
-	ip := strings.TrimSpace(string(b))
-	if ip == "" {
-		return
-	}
+	e.mu.Lock()
+	url := e.cfg.IPURL
+	e.mu.Unlock()
+
+	ip, err := fetchIP(e.ipifyClient, url)
 	now := time.Now().UnixMilli()
 	e.mu.Lock()
-	e.exitIP = ip
 	e.exitIPAt = now
-	e.publishLocked("ip", map[string]any{"ip": ip, "at": now})
+	if err != nil {
+		e.exitIPOK = false
+		e.exitIPErr = err.Error()
+		e.publishLocked("ip", map[string]any{"ok": false, "err": e.exitIPErr, "at": now})
+		e.mu.Unlock()
+		e.logf(true, "Exit IP lookup failed (%s): %v", url, err)
+		return
+	}
+	e.exitIP = ip
+	e.exitIPOK = true
+	e.exitIPErr = ""
+	e.publishLocked("ip", map[string]any{"ok": true, "ip": ip, "at": now})
 	e.mu.Unlock()
 	e.maybeAutoTag()
+}
+
+// fetchIP does one GET against an exit-IP endpoint and returns the IP, validating
+// that the response is actually an IP address (some endpoints answer HTML on error).
+func fetchIP(client *http.Client, url string) (string, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 256))
+	if err != nil {
+		return "", err
+	}
+	ip := strings.TrimSpace(string(b))
+	if net.ParseIP(ip) == nil {
+		if len(ip) > 60 {
+			ip = ip[:60] + "…"
+		}
+		return "", fmt.Errorf("unexpected response: %q", ip)
+	}
+	return ip, nil
 }
 
 func (e *Engine) probe(url string) (*int, string) {

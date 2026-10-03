@@ -7,6 +7,22 @@ import (
 )
 
 const maxUserURLs = 5
+const maxIPURLs = 10
+
+// ipPresets are the built-in exit-IP check endpoints; always shown first and cannot be removed.
+var ipPresets = []string{
+	"https://api.ipify.org/",
+	"https://ip.peppasoft.com?c=1",
+}
+
+func isIPPreset(u string) bool {
+	for _, p := range ipPresets {
+		if p == u {
+			return true
+		}
+	}
+	return false
+}
 
 type Preset struct {
 	Name string `json:"name"`
@@ -31,6 +47,8 @@ type Config struct {
 	UserURLs    []string `json:"userUrls"`    // max 5, oldest first
 	SoundMode   string   `json:"soundMode"`   // "off" | "on" | "err"
 	AutoTagIP   bool     `json:"autoTagIp"`   // tag the range automatically with the current exit IP
+	IPURL       string   `json:"ipUrl"`       // endpoint used to fetch the exit IP
+	IPURLList   []string `json:"ipUrlList"`   // user-added endpoints, max 10, oldest first
 }
 
 func defaultConfig() Config {
@@ -40,6 +58,8 @@ func defaultConfig() Config {
 		SpeedServer: "ookla",
 		UserURLs:    []string{},
 		SoundMode:   "off",
+		IPURL:       ipPresets[0],
+		IPURLList:   []string{},
 	}
 }
 
@@ -71,6 +91,15 @@ func (c *Config) normalize() {
 	}
 	if len(c.UserURLs) > maxUserURLs {
 		c.UserURLs = c.UserURLs[len(c.UserURLs)-maxUserURLs:]
+	}
+	if c.IPURL == "" {
+		c.IPURL = d.IPURL
+	}
+	if c.IPURLList == nil {
+		c.IPURLList = []string{}
+	}
+	if len(c.IPURLList) > maxIPURLs {
+		c.IPURLList = c.IPURLList[len(c.IPURLList)-maxIPURLs:]
 	}
 }
 
@@ -112,6 +141,21 @@ func addUserURL(list []string, u string) []string {
 	out = append(out, u)
 	if len(out) > maxUserURLs {
 		out = out[len(out)-maxUserURLs:]
+	}
+	return out
+}
+
+// addIPURL appends u (moving it to the end if it is already there) and keeps the last maxIPURLs.
+func addIPURL(list []string, u string) []string {
+	out := make([]string, 0, maxIPURLs+1)
+	for _, x := range list {
+		if x != u {
+			out = append(out, x)
+		}
+	}
+	out = append(out, u)
+	if len(out) > maxIPURLs {
+		out = out[len(out)-maxIPURLs:]
 	}
 	return out
 }

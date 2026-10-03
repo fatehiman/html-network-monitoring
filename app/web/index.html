@@ -46,8 +46,26 @@
   .range-row label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
   .tag-controls{display:flex;align-items:center;gap:5px}
   .tag-controls label{font-size:.7rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px}
-  .auto-tag-label{display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;white-space:nowrap}
+  .auto-tag-label{display:flex;align-items:center;gap:4px;user-select:none;white-space:nowrap}
+  .auto-tag-label label{display:flex;align-items:center;gap:4px;cursor:pointer}
   .auto-tag-label input{cursor:pointer}
+  .ip-link{cursor:pointer;border-bottom:1px dotted #576574}
+  .ip-link:hover{color:#4a90d9;border-bottom-color:#4a90d9}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;align-items:center;justify-content:center}
+  .modal-overlay.open{display:flex}
+  .modal-box{background:#141a2a;border:1px solid #2d3748;border-radius:10px;padding:14px 16px;min-width:300px;max-width:90vw;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .modal-title{font-size:.8rem;font-weight:600;color:#fff;margin-bottom:8px}
+  .modal-list{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;max-height:260px;overflow-y:auto}
+  .modal-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:.78rem}
+  .modal-item:hover{background:#1e2a3a}
+  .modal-item .chk{width:12px;color:#2ecc71}
+  .modal-item .u{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c8d6e5}
+  .modal-item.sel .u{color:#4a90d9}
+  .modal-item .x{color:#576574;padding:0 4px;border-radius:4px}
+  .modal-item .x:hover{color:#fff;background:#e74c3c}
+  .modal-add{display:flex;gap:5px}
+  .modal-add input{flex:1;background:#0a0e17;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.78rem;outline:none}
+  .modal-add input:focus{border-color:#4a90d9}
   .tag-input{background:#141a2a;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.8rem;width:120px;outline:none}
   .tag-input:focus{border-color:#4a90d9}
   .btn-tag{background:#2d3748;color:#8395a7;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.85rem;transition:all .15s}
@@ -117,10 +135,13 @@
       <select class="range-select" id="rangeSelect" onchange="onRangeChange()"></select>
     </div>
     <div class="tag-controls">
-      <label class="auto-tag-label" id="autoTagLabel">
-        <input type="checkbox" id="autoTagChk" onchange="toggleAutoTag()">
-        Auto tag (<span id="exitIpText">…</span>)
-      </label>
+      <span class="auto-tag-label" id="autoTagLabel">
+        <label for="autoTagChk">
+          <input type="checkbox" id="autoTagChk" onchange="toggleAutoTag()">
+          Auto tag
+        </label>
+        (<span id="exitIpText" class="ip-link" onclick="openIpModal()">…</span>)
+      </span>
       <label>Tag:</label>
       <input type="text" class="tag-input" id="tagInput" placeholder="e.g. WiFi-Home" onkeydown="if(event.key==='Enter')addTag()">
       <button class="btn-tag" onclick="addTag()" title="Add tag">⏎</button>
@@ -136,6 +157,17 @@
       <button class="btn-speed" id="ulBtn" onclick="api('/api/speed',{type:'ul'})" title="Test upload speed">⬆ UL</button>
       <input type="number" class="speed-input" id="ulInterval" value="0" min="0" max="999" title="Auto-test interval in minutes (0=off)">
       <span class="speed-unit">min</span>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ipModal" onclick="if(event.target===this) closeIpModal()">
+  <div class="modal-box">
+    <div class="modal-title">Exit IP check source</div>
+    <div class="modal-list" id="ipList"></div>
+    <div class="modal-add">
+      <input type="text" id="ipAddInput" placeholder="https://example.com/ip" spellcheck="false">
+      <button class="btn-mini" onclick="addIpUrl()" title="Add">+</button>
     </div>
   </div>
 </div>
@@ -180,7 +212,8 @@ let liveKey = null, rangeKeys = [];
 let viewingRangeKey = null;
 let viewing = {points: [], tags: [], speed: []}; // points: [{time:Date, ms}]
 let speedBusy = {dl: false, ul: false};
-let exitIp = '', exitIpAt = 0;
+let exitIp = '', exitIpAt = 0, exitIpOk = false, exitIpErr = '';
+const IP_PRESETS = ['https://api.ipify.org/', 'https://ip.peppasoft.com?c=1'];
 
 const canvas = $('chart');
 const ctx = canvas.getContext('2d');
@@ -200,7 +233,7 @@ async function loadState() {
   const st = await getJSON('/api/state');
   cfg = st.config; presets = st.presets; running = st.running; nativeSound = st.nativeSound;
   liveKey = st.liveKey; rangeKeys = st.ranges; speedBusy = st.speedBusy;
-  exitIp = st.exitIp || ''; exitIpAt = st.exitIpAt || 0; updateExitIpUI();
+  exitIp = st.exitIp || ''; exitIpAt = st.exitIpAt || 0; exitIpOk = !!st.exitIpOk; exitIpErr = st.exitIpErr || ''; updateExitIpUI();
   applyConfig(true);
   setRunningUI();
   setSpeedBusyUI();
@@ -254,7 +287,12 @@ function connectEvents() {
         break;
       }
       case 'config': cfg = d; applyConfig(false); break;
-      case 'ip': exitIp = d.ip; exitIpAt = d.at; updateExitIpUI(); break;
+      case 'ip': {
+        exitIpAt = d.at; exitIpOk = !!d.ok;
+        if (d.ok) { exitIp = d.ip; exitIpErr = ''; } else { exitIpErr = d.err || ''; }
+        updateExitIpUI();
+        break;
+      }
       case 'running': running = d; setRunningUI(); break;
       case 'cleared': loadState(); break;
     }
@@ -314,7 +352,7 @@ $('urlMenu').addEventListener('click', e => {
 });
 function toggleUrlMenu(e) { e.stopPropagation(); renderUrlMenu(); $('urlMenu').classList.toggle('open'); }
 document.addEventListener('click', () => $('urlMenu').classList.remove('open'));
-document.addEventListener('keydown', e => { if (e.key === 'Escape') $('urlMenu').classList.remove('open'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('urlMenu').classList.remove('open'); closeIpModal(); } });
 function addUserURL() {
   const u = $('urlInput').value.trim();
   if (!u) return;
@@ -348,8 +386,43 @@ function addTag() {
 }
 function toggleAutoTag() { api('/api/config', {autoTagIp: $('autoTagChk').checked}); }
 function updateExitIpUI() {
-  $('exitIpText').textContent = exitIp || '…';
-  $('autoTagLabel').title = exitIpAt ? 'Last update: ' + new Date(exitIpAt).toLocaleString() : 'Not fetched yet';
+  const span = $('exitIpText');
+  if (!exitIpAt) { span.textContent = '…'; span.title = 'Not fetched yet'; }
+  else if (exitIpOk) { span.textContent = exitIp; span.title = 'Last update: ' + new Date(exitIpAt).toLocaleString(); }
+  else { span.textContent = 'IP fetch error'; span.title = exitIpErr || 'Unknown error'; }
+  renderIpList();
+}
+
+// ===================== IP SOURCE MODAL =====================
+function openIpModal() { renderIpList(); $('ipModal').classList.add('open'); }
+function closeIpModal() { $('ipModal').classList.remove('open'); }
+function renderIpList() {
+  const box = $('ipList');
+  if (!box || !cfg) return;
+  const all = IP_PRESETS.concat(cfg.ipUrlList || []);
+  let h = '';
+  for (const u of all) {
+    const fixed = IP_PRESETS.includes(u);
+    const sel = cfg.ipUrl === u;
+    h += '<div class="modal-item' + (sel ? ' sel' : '') + '" data-url="' + esc(u) + '">'
+       + '<span class="chk">' + (sel ? '✓' : '') + '</span>'
+       + '<span class="u">' + esc(u) + '</span>'
+       + (fixed ? '' : '<span class="x" data-del="' + esc(u) + '" title="Remove">✕</span>')
+       + '</div>';
+  }
+  box.innerHTML = h;
+}
+$('ipList').addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  if (del) { e.stopPropagation(); api('/api/ipurls/remove', {url: del.dataset.del}).then(c => { if (c) { cfg = c; renderIpList(); } }); return; }
+  const it = e.target.closest('.modal-item');
+  if (!it) return;
+  api('/api/config', {ipUrl: it.dataset.url}).then(c => { if (c) cfg = c; closeIpModal(); });
+});
+function addIpUrl() {
+  const u = $('ipAddInput').value.trim();
+  if (!u || IP_PRESETS.includes(u)) { $('ipAddInput').value = ''; return; }
+  api('/api/ipurls/add', {url: u}).then(c => { if (c) { cfg = c; $('ipAddInput').value = ''; renderIpList(); } });
 }
 
 // ===================== TAG UI =====================

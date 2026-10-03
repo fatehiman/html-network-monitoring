@@ -202,6 +202,16 @@ func newMux(e *Engine) http.Handler {
 		json.Unmarshal(b, &p)
 		return e.RemoveUserURL(p.URL), nil
 	})
+	post("/api/ipurls/add", func(b json.RawMessage) (any, error) {
+		var p struct{ URL string }
+		json.Unmarshal(b, &p)
+		return e.AddIPURL(p.URL), nil
+	})
+	post("/api/ipurls/remove", func(b json.RawMessage) (any, error) {
+		var p struct{ URL string }
+		json.Unmarshal(b, &p)
+		return e.RemoveIPURL(p.URL), nil
+	})
 	post("/api/toggle", func(json.RawMessage) (any, error) { return e.Toggle(), nil })
 	post("/api/clear", func(json.RawMessage) (any, error) { e.ClearAll(); return true, nil })
 	post("/api/tag", func(b json.RawMessage) (any, error) {
