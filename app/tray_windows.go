@@ -110,6 +110,11 @@ type tray struct {
 	host    string
 	last    string // last probe text for the tooltip
 	dl, ul  float64
+
+	geo     *GeoLookup
+	exitIP  string // current exit IP ("" = unknown or last fetch failed)
+	geoIP   string // IP that geoText belongs to
+	geoText string // "Country - City - ISP", 3rd tooltip line
 }
 
 func runFrontend(e *Engine, uiURL string, _ bool) {
@@ -126,6 +131,10 @@ func (t *tray) onReady() {
 	st := t.e.State()
 	t.mode, t.running, t.host = st.Config.SoundMode, st.Running, hostOf(st.Config.URL)
 	t.last = "starting…"
+	t.geo = newGeoLookup(t.e.dataDir)
+	if st.ExitIPOK {
+		t.setExitIP(st.ExitIP)
+	}
 	if rd, ok := t.e.Range(st.LiveKey); ok {
 		t.setSpeed(rd.Speed)
 	}
@@ -224,6 +233,17 @@ func (t *tray) watch() {
 			t.setSpeed(d.Speed)
 		case "cleared":
 			t.dl, t.ul = 0, 0
+		case "ip":
+			var d struct {
+				OK bool   `json:"ok"`
+				IP string `json:"ip"`
+			}
+			json.Unmarshal(m.Data, &d)
+			if d.OK {
+				t.setExitIP(d.IP)
+			} else {
+				t.setExitIP("") // no internet / endpoint error: hide the location line
+			}
 		}
 		t.updateTooltip()
 		t.mu.Unlock()
@@ -266,6 +286,28 @@ func (t *tray) setColor(c string) {
 	systray.SetIcon(t.icons[c])
 }
 
+// setExitIP looks up the location of a new exit IP (cache first) in the
+// background. Caller holds t.mu.
+func (t *tray) setExitIP(ip string) {
+	t.exitIP = ip
+	if ip == "" || (ip == t.geoIP && t.geoText != "") {
+		return
+	}
+	go func() {
+		text, err := t.geo.Lookup(ip)
+		if err != nil {
+			t.e.logf(true, "IP location lookup failed (%s): %v", ip, err)
+		}
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if t.exitIP != ip {
+			return // IP changed while we were waiting
+		}
+		t.geoIP, t.geoText = ip, text
+		t.updateTooltip()
+	}()
+}
+
 func (t *tray) setSpeed(list []SpeedResult) {
 	for _, s := range list {
 		if s.Type == "dl" {
@@ -282,6 +324,13 @@ func (t *tray) updateTooltip() {
 		status = "paused"
 	}
 	tip := "netmon — " + status + "\n" + t.host
+	if t.exitIP != "" && t.exitIP == t.geoIP && t.geoText != "" {
+		g := []rune(t.geoText)
+		if len(g) > 60 {
+			g = append(g[:59], '…')
+		}
+		tip += "\n" + string(g)
+	}
 	if t.dl > 0 || t.ul > 0 {
 		tip += fmt.Sprintf("\nDL %s · UL %s Mbps", fmtMbps(t.dl), fmtMbps(t.ul))
 	}

@@ -52,7 +52,19 @@ The icon is a pulse line on a colored square. The color follows the **last** rep
 | 🟥 red | reply in 2000 ms or more, or no reply (timeout 5 s / error) |
 | ⬜ grey | starting, or paused |
 
-Hover over it to see the last time, the target host and the last DL/UL speed.
+Hover over it to see a tooltip like this:
+
+```
+netmon — 135 ms
+clients3.google.com
+Germany - Frankfurt - Clouvider Limited
+DL 45 · UL 12 Mbps
+```
+
+- Line 1: the last time (or `paused` / `no answer`).
+- Line 2: the target host.
+- Line 3: country, city and ISP of your **exit IP** (the IP shown next to "Auto tag", see [Network tags](#4-network-tags)). netmon gets it from `https://ip.peppasoft.com/?ip=<ip>` each time the exit IP changes. Answers are cached in `geoip.json` for 10 days (max 50 IPs), so a known IP needs no request. The line is **not shown** when the exit-IP check fails (for example no internet), when the location request fails, or when the answer has an unknown format or no data. An empty city is skipped (`Iran - Aria Shatel PJSC`).
+- Line 4: the last DL/UL speed (only after a speed test).
 
 Right-click menu:
 
@@ -117,6 +129,7 @@ In the data folder:
 
 - `config.json` — target URL, intervals, speed server, your saved URLs, sound mode, auto-tag-by-IP checkbox, exit-IP check endpoint and your saved endpoints
 - `ranges/YYYYMMDD-HH.json` — one file per 2-hour range: `{"points": [[timestampMs, ms|null], …], "tags": […], "speed": […]}`
+- `geoip.json` — Windows only: cache of exit-IP locations for the tray tooltip (`{"<ip>": {"text": "…", "at": timestampMs}}`, 10 days, max 50 IPs)
 - `netmon.lock` — single-instance lock
 
 Ranges older than 10 days are deleted; at most 120 ranges are kept.
@@ -161,6 +174,7 @@ Source files in `app/`:
 | `store.go` | data files |
 | `config.go` | config and URL presets |
 | `tray_windows.go` | Windows tray, beeps, message box, lock |
+| `geo.go` | country / city / ISP of the exit IP, with cache (tray tooltip) |
 | `platform_other.go` | Linux console front end, lock |
 | `internal/icon/` | draws the icon (tray, favicon, exe) |
 | `internal/sound/` | makes and plays the Windows beeps |
