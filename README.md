@@ -66,6 +66,8 @@ DL 45 · UL 12 Mbps
 - Line 3: country, city and ISP of your **exit IP** (the IP shown next to "Auto tag", see [Network tags](#4-network-tags)). netmon gets it from `https://ip.peppasoft.com/?ip=<ip>` each time the exit IP changes. Answers are cached in `geoip.json` for 10 days (max 50 IPs), so a known IP needs no request. The line is **not shown** when the exit-IP check fails (for example no internet), when the location request fails, or when the answer has an unknown format or no data. An empty city is skipped (`Iran - Aria Shatel PJSC`).
 - Line 4: the last DL/UL speed (only after a speed test).
 
+**Double-click** the icon to open the UI in your default browser (same as **Open**). A single left click does nothing.
+
 Right-click menu:
 
 - **Open** — opens the UI in your default browser

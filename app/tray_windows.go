@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"fyne.io/systray"
@@ -27,7 +28,9 @@ const nativeSound = true
 var (
 	kernel32         = windows.NewLazySystemDLL("kernel32.dll")
 	pAttachConsole   = kernel32.NewProc("AttachConsole")
-	pMessageBox      = windows.NewLazySystemDLL("user32.dll").NewProc("MessageBoxW")
+	user32           = windows.NewLazySystemDLL("user32.dll")
+	pMessageBox      = user32.NewProc("MessageBoxW")
+	pDblClickTime    = user32.NewProc("GetDoubleClickTime")
 	consoleAvailable bool
 )
 
@@ -152,6 +155,20 @@ func (t *tray) onReady() {
 	mExit := systray.AddMenuItem("Exit", "Stop monitoring and exit")
 	t.showSoundChecks(t.mode)
 	t.updateTooltip()
+
+	// systray only reports single clicks, so detect a double-click here: two left
+	// clicks within the Windows double-click time = Open. A single left click does
+	// nothing (the menu is on right-click), so no menu gets in the way.
+	var lastClick time.Time
+	systray.SetOnTapped(func() {
+		ms, _, _ := pDblClickTime.Call()
+		if now := time.Now(); now.Sub(lastClick) <= time.Duration(ms)*time.Millisecond {
+			lastClick = time.Time{}
+			openBrowser(t.uiURL)
+		} else {
+			lastClick = now
+		}
+	})
 
 	go func() {
 		for {
