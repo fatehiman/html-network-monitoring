@@ -32,6 +32,7 @@ type Note struct {
 	Time    int64  `json:"time"` // ms, the date-time the note is about
 	Tag     string `json:"tag"`
 	Body    string `json:"body"`
+	Jalali  bool   `json:"jalali,omitempty"` // show the date in the Jalali calendar (Time is still a normal timestamp)
 	Created int64  `json:"created"`
 	Updated int64  `json:"updated"`
 }

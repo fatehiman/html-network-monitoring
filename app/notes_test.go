@@ -37,6 +37,15 @@ func TestNotesCRUD(t *testing.T) {
 	if got := loadNotes(dir); len(got) != 2 {
 		t.Fatalf("on disk: %d notes", len(got))
 	}
+	// The Jalali flag is kept (and saved), the time stays a normal timestamp.
+	up = l[0]
+	up.Jalali = true
+	if l, err = e.SaveNote(up); err != nil || !l[0].Jalali || l[0].Time != up.Time {
+		t.Fatalf("jalali flag: %+v, %v", l, err)
+	}
+	if got := loadNotes(dir); !(got[0].Jalali || got[1].Jalali) {
+		t.Fatal("jalali flag not saved to disk")
+	}
 	if l = e.DeleteNote(up.ID); len(l) != 1 || l[0].Title != "newer" {
 		t.Fatalf("delete: %+v", l)
 	}

@@ -132,7 +132,7 @@ In the data folder:
 
 - `config.json` — target URL, intervals, speed server, your saved URLs, sound mode, auto-tag-by-IP checkbox, exit-IP check endpoint and your saved endpoints
 - `ranges/YYYYMMDD-HH.json` — one file per 2-hour range: `{"points": [[timestampMs, ms|null], …], "tags": […], "speed": […]}`
-- `notes.json` — your notes: `[{id, title, time, tag, body, created, updated}, …]` (times in ms)
+- `notes.json` — your notes: `[{id, title, time, tag, body, jalali, created, updated}, …]` (times in ms; `jalali` = show the date in the Jalali calendar)
 - `geoip.json` — Windows only: cache of exit-IP locations for the tray tooltip (`{"<ip>": {"text": "…", "at": timestampMs}}`, 10 days, max 50 IPs)
 - `netmon.lock` — single-instance lock
 
@@ -156,7 +156,7 @@ In the data folder:
 | POST | `/api/speed` | `{"type": "dl"}` or `"ul"` | `false` if that test is already queued |
 | POST | `/api/clear` | | deletes all data except notes |
 | GET | `/api/notes` | | `{notes: […], latestTag: "…"}`, notes newest first |
-| POST | `/api/notes/save` | `{id, title, time, tag, body}` (`id` empty = new note) | all notes, newest first |
+| POST | `/api/notes/save` | `{id, title, time, tag, body, jalali}` (`id` empty = new note) | all notes, newest first |
 | POST | `/api/notes/delete` | `{"id": "…"}` | all notes, newest first |
 
 ### Build from source
@@ -276,11 +276,12 @@ Click the **note** button (next to **Clear**) to open the Notes window.
 - The list shows every note, **newest first** (by the note's date-time). Type in **Search** to filter by title, tag or text.
 - **+** writes a new note. Each note has:
   - **Title** (required)
-  - **Date and time** — now by default, you can change it
+  - **Date and time** — now by default, you can change it. The small **G / J** button next to it switches the field between the **Gregorian** and the **Jalali** (شمسی) calendar. Switching converts the date in the field, so the moment stays the same. In Jalali mode you type the date (`1405/08/01`, Persian digits work too) or pick it in a small Jalali month view (week starts on Saturday), plus a time. New notes start with the calendar you used last (saved per browser).
   - **Tag** — the latest network tag by default, you can change it. The field suggests the latest tag and the tags of your other notes.
   - **Text**
 - Click a note (or the pencil) to edit it; the trash button deletes it (with confirm). `Ctrl+Enter` saves, `Esc` goes back.
 - **On the chart:** a small note icon above the chart and a dashed line show where each note is. Hover to see the title, click to open it.
+- **Jalali notes:** the date is always saved as a normal (Gregorian) timestamp. A note saved in Jalali mode only gets the flag `jalali: true`, so the list and the edit form show its date in Jalali (hover the date in the list to see it in Gregorian). The chart and everything else always use Gregorian.
 - Title and text can be in any language (right-to-left text such as Persian is shown correctly).
 - **Clear** does not delete notes.
 - App: saved in `notes.json` in the data folder (not in the browser), and every open UI tab is updated live. Browser version: saved in `localStorage` (`httpsmon_notes`).
@@ -313,7 +314,7 @@ Click the **note** button (next to **Clear**) to open the Notes window.
 | `httpsmon_` | `httpsmon_2026/03/06 00:00-02:00` | `[[timestamp, ms\|null], ...]` | Ping points. `null` = failed |
 | `httpsmon_tags_` | `httpsmon_tags_2026/03/06 00:00-02:00` | `[{text, color, start, end}, ...]` | Tags of the range |
 | `httpsmon_speed_` | `httpsmon_speed_2026/03/06 00:00-02:00` | `[{time, type, mbps}, ...]` | Speed results (`type`: `"dl"` / `"ul"`) |
-| `httpsmon_notes` | `httpsmon_notes` | `[{id, title, time, tag, body, created, updated}, ...]` | Notes (kept 180 days) |
+| `httpsmon_notes` | `httpsmon_notes` | `[{id, title, time, tag, body, jalali, created, updated}, ...]` | Notes (kept 180 days) |
 | `httpsmon_config` | `httpsmon_config` | `{url, interval, dlInterval, ulInterval, userUrls, autoTagIp, ipUrl, ipUrlList}` | Saved config |
 
 - Ranges older than 10 days are purged; at most 120 ranges are kept. (Browsers allow only about 5 MB of `localStorage`, which is about 9 days of chart data. Use the netmon app to keep 180 days.)

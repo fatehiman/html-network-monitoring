@@ -131,6 +131,25 @@
   .tbtn.save{color:#9db9ee;background:#202b44;border-color:#2e3d61}
   .tbtn.cancel{color:#b0b7c8;background:#272c37;border-color:#373e4c}
   .tbtn.del{color:#eba0a0;background:#3b2224;border-color:#573134;margin-right:auto}
+  .note-date{display:flex;gap:6px;align-items:center;position:relative}
+  .note-date input{min-width:0}
+  .jdate{display:flex;gap:6px;flex:1;min-width:0}
+  .jdate #noteJDate{flex:1.3}.jdate #noteJTime{flex:1}
+  .cal-tgl{flex:none;width:30px;height:28px;border-radius:6px;border:1px solid #40375e;background:#2c2540;color:#bfaee8;font-size:.72rem;font-weight:700;cursor:pointer}
+  .cal-tgl:hover{filter:brightness(1.3)}
+  .cal-tgl.j{border-color:#2a4a4d;background:#1c3234;color:#8ccdd2}
+  .jcal{display:none;position:absolute;top:32px;left:0;z-index:60;width:252px;background:#141a2a;border:1px solid #2d3748;border-radius:8px;padding:8px;box-shadow:0 6px 20px rgba(0,0,0,.5);direction:rtl;font-family:Tahoma,'Segoe UI',sans-serif}
+  .jcal.open{display:block}
+  .jcal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;color:#fff;font-size:.8rem;font-weight:600}
+  .jcal-head button{background:#2d3748;color:#c8d6e5;border:none;border-radius:5px;width:26px;height:22px;cursor:pointer}
+  .jcal-head button:hover{background:#4a5568}
+  .jcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+  .jcal-grid .wd{font-size:.65rem;color:#576574;padding:2px 0}
+  .jcal-grid .d{font-size:.75rem;color:#c8d6e5;padding:4px 0;border-radius:5px;cursor:pointer}
+  .jcal-grid .d:hover{background:#1e2a3a}
+  .jcal-grid .d.fri{color:#eba0a0}
+  .jcal-grid .d.today{box-shadow:inset 0 0 0 1px #4a90d9}
+  .jcal-grid .d.sel{background:#202b44;color:#9db9ee;font-weight:700}
   .note-strip{position:relative;height:0;z-index:2}
   .note-mark{position:absolute;top:1px;width:17px;height:17px;margin-left:-8px;border-radius:4px;border:1px solid #54452a;background:#3a2f1a;color:#e3c07f;display:flex;align-items:center;justify-content:center;cursor:pointer}
   .note-mark:hover{filter:brightness(1.4)}
@@ -224,7 +243,12 @@
       <div class="modal-title" id="noteFormTitle">New note</div>
       <div><label for="noteTitle">Title</label><input type="text" id="noteTitle" maxlength="200" dir="auto"></div>
       <div class="row2">
-        <div><label for="noteTime">Date and time</label><input type="datetime-local" id="noteTime"></div>
+        <div><label for="noteTime">Date and time</label><div class="note-date">
+          <input type="datetime-local" id="noteTime">
+          <div class="jdate" id="noteJWrap" style="display:none"><input type="text" id="noteJDate" placeholder="1405/08/01" maxlength="10" spellcheck="false" autocomplete="off" title="Jalali date, e.g. 1405/08/01"><input type="time" id="noteJTime"></div>
+          <button type="button" class="cal-tgl" id="noteCalBtn" onclick="toggleNoteCal()">G</button>
+          <div class="jcal" id="jcal"></div>
+        </div></div>
         <div><label for="noteTag">Tag</label><input type="text" id="noteTag" maxlength="100" list="noteTagList" spellcheck="false" dir="auto"><datalist id="noteTagList"></datalist></div>
       </div>
       <div><label for="noteBody">Text</label><textarea id="noteBody" maxlength="10000" dir="auto"></textarea></div>
@@ -1182,7 +1206,7 @@ function renderNoteList() {
     return;
   }
   box.innerHTML = list.map(n => '<div class="note-row" data-id="' + noteEsc(n.id) + '">'
-    + '<div class="note-main"><div class="note-meta"><span>' + fmtNoteTime(n.time) + '</span>'
+    + '<div class="note-main"><div class="note-meta"><span' + (n.jalali ? ' title="' + fmtNoteTime(n.time) + '"' : '') + '>' + fmtNoteListTime(n) + '</span>'
     + (n.tag ? '<span class="note-tag" style="background:' + noteTagColor(n.tag) + '">' + noteEsc(n.tag) + '</span>' : '')
     + '</div><div class="note-title" dir="auto">' + noteEsc(n.title) + '</div>'
     + (n.body ? '<div class="note-prev" dir="auto">' + noteEsc(n.body.replace(/\s+/g, ' ')) + '</div>' : '')
@@ -1203,11 +1227,12 @@ async function openNoteForm(id) {
   noteEditId = n ? n.id : '';
   noteEl('noteFormTitle').textContent = n ? 'Edit note' : 'New note';
   noteEl('noteTitle').value = n ? n.title : '';
-  noteEl('noteTime').value = fmtNoteTime(n ? n.time : Date.now()).replace(' ', 'T');
+  setNoteCal(n ? (n.jalali ? 'j' : 'g') : lastNoteCal());
+  setNoteFormTime(n ? n.time : Date.now());
   noteEl('noteTag').value = n ? n.tag : '';
   noteEl('noteBody').value = n ? n.body : '';
   noteEl('noteErr').textContent = '';
-  noteEl('noteTitle').classList.remove('bad'); noteEl('noteTime').classList.remove('bad');
+  noteEl('noteTitle').classList.remove('bad'); noteEl('noteTime').classList.remove('bad'); noteEl('noteJDate').classList.remove('bad');
   noteEl('noteDelBtn').style.display = n ? '' : 'none';
   noteEl('noteListView').style.display = 'none';
   noteEl('noteFormView').style.display = 'flex';
@@ -1221,11 +1246,11 @@ async function openNoteForm(id) {
 }
 async function saveNote() {
   const title = noteEl('noteTitle').value.trim();
-  const time = new Date(noteEl('noteTime').value).getTime(); // "YYYY-MM-DDTHH:mm" = local time
+  const time = noteFormTime();
   noteEl('noteTitle').classList.toggle('bad', !title);
-  noteEl('noteTime').classList.toggle('bad', isNaN(time));
-  if (!title || isNaN(time)) { noteEl('noteErr').textContent = !title ? 'Please write a title.' : 'Please set the date and time.'; return; }
-  const err = await notesBackend.save({id: noteEditId, title: title, time: time, tag: noteEl('noteTag').value.trim(), body: noteEl('noteBody').value});
+  noteEl(noteCal === 'j' ? 'noteJDate' : 'noteTime').classList.toggle('bad', isNaN(time));
+  if (!title || isNaN(time)) { noteEl('noteErr').textContent = !title ? 'Please write a title.' : (noteCal === 'j' ? 'Please set a valid Jalali date (like 1405/08/01) and a time.' : 'Please set the date and time.'); return; }
+  const err = await notesBackend.save({id: noteEditId, title: title, time: time, tag: noteEl('noteTag').value.trim(), body: noteEl('noteBody').value, jalali: noteCal === 'j'});
   if (err) { noteEl('noteErr').textContent = err; return; }
   showNoteList();
 }
@@ -1238,9 +1263,164 @@ async function deleteNote(id) {
 }
 document.addEventListener('keydown', e => {
   if (!noteEl('notesModal').classList.contains('open')) return;
-  if (e.key === 'Escape') { if (noteEditId !== null) showNoteList(); else closeNotes(); }
+  if (e.key === 'Escape') {
+    if (noteEl('jcal').classList.contains('open')) noteEl('jcal').classList.remove('open');
+    else if (noteEditId !== null) showNoteList(); else closeNotes();
+  }
   else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && noteEditId !== null) { e.preventDefault(); saveNote(); }
 });
+
+// ---- Jalali calendar: only for the note date field and the notes list ----
+// A note's date is always saved as a normal timestamp; the "jalali" flag only
+// says to show it in Jalali. Converter: the jalaali-js algorithm (MIT).
+const J_MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+const J_BREAKS = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178];
+const jdiv = (a, b) => ~~(a / b), jmod = (a, b) => a - ~~(a / b) * b;
+function jalCal(jy) {
+  const gy = jy + 621;
+  let leapJ = -14, jp = J_BREAKS[0], jump = 0;
+  for (let i = 1; i < J_BREAKS.length; i++) {
+    const jm = J_BREAKS[i];
+    jump = jm - jp;
+    if (jy < jm) break;
+    leapJ += jdiv(jump, 33) * 8 + jdiv(jmod(jump, 33), 4);
+    jp = jm;
+  }
+  let n = jy - jp;
+  leapJ += jdiv(n, 33) * 8 + jdiv(jmod(n, 33) + 3, 4);
+  if (jmod(jump, 33) === 4 && jump - n === 4) leapJ += 1;
+  const leapG = jdiv(gy, 4) - jdiv((jdiv(gy, 100) + 1) * 3, 4) - 150;
+  if (jump - n < 6) n = n - jump + jdiv(jump + 4, 33) * 33;
+  let leap = jmod(jmod(n + 1, 33) - 1, 4);
+  if (leap === -1) leap = 4;
+  return {leap: leap, gy: gy, march: 20 + leapJ - leapG}; // leap === 0: leap year
+}
+function g2d(gy, gm, gd) {
+  const d = jdiv((gy + jdiv(gm - 8, 6) + 100100) * 1461, 4) + jdiv(153 * jmod(gm + 9, 12) + 2, 5) + gd - 34840408;
+  return d - jdiv(jdiv(gy + 100100 + jdiv(gm - 8, 6), 100) * 3, 4) + 752;
+}
+function d2g(jdn) {
+  let j = 4 * jdn + 139361631;
+  j = j + jdiv(jdiv(4 * jdn + 183187720, 146097) * 3, 4) * 4 - 3908;
+  const i = jdiv(jmod(j, 1461), 4) * 5 + 308;
+  const gm = jmod(jdiv(i, 153), 12) + 1;
+  return {gy: jdiv(j, 1461) - 100100 + jdiv(8 - gm, 6), gm: gm, gd: jdiv(jmod(i, 153), 5) + 1};
+}
+function toGregorian(jy, jm, jd) {
+  const r = jalCal(jy);
+  return d2g(g2d(r.gy, 3, r.march) + (jm - 1) * 31 - jdiv(jm, 7) * (jm - 7) + jd - 1);
+}
+function toJalali(gy, gm, gd) {
+  const jdn = g2d(gy, gm, gd);
+  let jy = gy - 621;
+  const r = jalCal(jy);
+  let k = jdn - g2d(gy, 3, r.march);
+  if (k >= 0) {
+    if (k <= 185) return {jy: jy, jm: 1 + jdiv(k, 31), jd: jmod(k, 31) + 1};
+    k -= 186;
+  } else {
+    jy -= 1; k += 179;
+    if (r.leap === 1) k += 1;
+  }
+  return {jy: jy, jm: 7 + jdiv(k, 30), jd: jmod(k, 30) + 1};
+}
+function jMonthLen(jy, jm) { return jm <= 6 ? 31 : jm <= 11 ? 30 : (jalCal(jy).leap === 0 ? 30 : 29); }
+function msToJalali(ms) { const d = new Date(ms); return toJalali(d.getFullYear(), d.getMonth() + 1, d.getDate()); }
+function fmtJalali(ms) { const j = msToJalali(ms); return j.jy + '/' + pad2(j.jm) + '/' + pad2(j.jd); }
+// "1405/8/1" -> {jy, jm, jd}, or null. Persian and Arabic digits are accepted.
+function parseJalali(s) {
+  s = s.replace(/[۰-۹]/g, c => c.charCodeAt(0) - 0x6F0).replace(/[٠-٩]/g, c => c.charCodeAt(0) - 0x660).trim();
+  const m = /^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/.exec(s);
+  if (!m) return null;
+  const jy = +m[1], jm = +m[2], jd = +m[3];
+  if (jy < 1300 || jy > 1500 || jm < 1 || jm > 12 || jd < 1 || jd > jMonthLen(jy, jm)) return null;
+  return {jy: jy, jm: jm, jd: jd};
+}
+
+// ---- note date field: Gregorian (datetime-local) or Jalali (text + picker + time) ----
+let noteCal = 'g'; // 'g' | 'j'
+let jcalView = null; // {jy, jm} shown in the Jalali picker
+const NOTE_CAL_KEY = 'netmonNoteCal'; // last used calendar, per browser
+function lastNoteCal() { try { return localStorage.getItem(NOTE_CAL_KEY) === 'j' ? 'j' : 'g'; } catch (e) { return 'g'; } }
+// noteFormTime returns the time in the active date field (ms), or NaN.
+function noteFormTime() {
+  if (noteCal === 'g') return new Date(noteEl('noteTime').value).getTime(); // "YYYY-MM-DDTHH:mm" = local time
+  const j = parseJalali(noteEl('noteJDate').value), t = /^(\d\d):(\d\d)/.exec(noteEl('noteJTime').value);
+  if (!j || !t) return NaN;
+  const g = toGregorian(j.jy, j.jm, j.jd);
+  return new Date(g.gy, g.gm - 1, g.gd, +t[1], +t[2]).getTime();
+}
+function setNoteFormTime(ms) {
+  noteEl('noteTime').value = fmtNoteTime(ms).replace(' ', 'T');
+  noteEl('noteJDate').value = fmtJalali(ms);
+  noteEl('noteJTime').value = fmtNoteTime(ms).slice(11);
+}
+function setNoteCal(cal) {
+  noteCal = cal;
+  const j = cal === 'j', b = noteEl('noteCalBtn');
+  noteEl('noteTime').style.display = j ? 'none' : '';
+  noteEl('noteJWrap').style.display = j ? 'flex' : 'none';
+  b.textContent = j ? 'J' : 'G';
+  b.classList.toggle('j', j);
+  b.title = j ? 'Calendar: Jalali (شمسی). Click to use Gregorian' : 'Calendar: Gregorian. Click to use Jalali (شمسی)';
+  b.setAttribute('aria-label', b.title);
+  noteEl('jcal').classList.remove('open');
+}
+// The toggle converts the date in the field, so the moment stays the same.
+function toggleNoteCal() {
+  const t = noteFormTime();
+  setNoteCal(noteCal === 'g' ? 'j' : 'g');
+  if (!isNaN(t)) setNoteFormTime(t);
+  noteEl('noteTime').classList.remove('bad'); noteEl('noteJDate').classList.remove('bad');
+  try { localStorage.setItem(NOTE_CAL_KEY, noteCal); } catch (e) {}
+}
+function openJcal() {
+  const j = parseJalali(noteEl('noteJDate').value) || msToJalali(Date.now());
+  jcalView = {jy: j.jy, jm: j.jm};
+  renderJcal();
+  noteEl('jcal').classList.add('open');
+}
+function renderJcal() {
+  const jy = jcalView.jy, jm = jcalView.jm, sel = parseJalali(noteEl('noteJDate').value), tj = msToJalali(Date.now());
+  const g = toGregorian(jy, jm, 1), first = (new Date(g.gy, g.gm - 1, g.gd).getDay() + 1) % 7; // 0 = Saturday
+  // The picker is right-to-left, so the first button (on the right) goes back.
+  let h = '<div class="jcal-head"><button type="button" data-m="-1" title="Previous month">›</button><span>' + J_MONTHS[jm - 1] + ' ' + jy
+    + '</span><button type="button" data-m="1" title="Next month">‹</button></div><div class="jcal-grid">';
+  for (const w of ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج']) h += '<div class="wd">' + w + '</div>';
+  for (let i = 0; i < first; i++) h += '<div></div>';
+  for (let d = 1; d <= jMonthLen(jy, jm); d++) {
+    let c = 'd';
+    if ((first + d - 1) % 7 === 6) c += ' fri';
+    if (sel && sel.jy === jy && sel.jm === jm && sel.jd === d) c += ' sel';
+    if (tj.jy === jy && tj.jm === jm && tj.jd === d) c += ' today';
+    h += '<div class="' + c + '" data-d="' + d + '">' + d + '</div>';
+  }
+  noteEl('jcal').innerHTML = h + '</div>';
+}
+noteEl('jcal').addEventListener('click', e => {
+  e.stopPropagation();
+  const m = e.target.closest('[data-m]');
+  if (m) {
+    let jy = jcalView.jy, jm = jcalView.jm + +m.dataset.m;
+    if (jm < 1) { jm = 12; jy--; } else if (jm > 12) { jm = 1; jy++; }
+    jcalView = {jy: jy, jm: jm}; renderJcal();
+    return;
+  }
+  const d = e.target.closest('[data-d]');
+  if (d) {
+    noteEl('noteJDate').value = jcalView.jy + '/' + pad2(jcalView.jm) + '/' + pad2(+d.dataset.d);
+    noteEl('noteJDate').classList.remove('bad');
+    noteEl('jcal').classList.remove('open');
+  }
+});
+noteEl('noteJDate').addEventListener('click', e => { e.stopPropagation(); openJcal(); });
+noteEl('noteJDate').addEventListener('input', () => {
+  const j = parseJalali(noteEl('noteJDate').value);
+  if (j && noteEl('jcal').classList.contains('open')) { jcalView = {jy: j.jy, jm: j.jm}; renderJcal(); }
+});
+document.addEventListener('click', () => noteEl('jcal').classList.remove('open'));
+// Date in the notes list: Jalali for notes saved in Jalali.
+function fmtNoteListTime(n) { return n.jalali ? fmtJalali(n.time) + ' ' + fmtNoteTime(n.time).slice(11) : fmtNoteTime(n.time); }
 
 // ---- notes on the chart: a small icon above the chart and a dashed line ----
 function notesInView() {
