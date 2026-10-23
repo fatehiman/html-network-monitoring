@@ -163,6 +163,9 @@ func newMux(e *Engine) http.Handler {
 		}
 		writeJSON(w, rd)
 	})
+	mux.HandleFunc("GET /api/notes", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"notes": e.Notes(), "latestTag": e.LatestTag()})
+	})
 	mux.HandleFunc("GET /api/events", func(w http.ResponseWriter, r *http.Request) { serveEvents(e, w, r) })
 
 	post := func(path string, h func(body json.RawMessage) (any, error)) {
@@ -227,6 +230,18 @@ func newMux(e *Engine) http.Handler {
 		json.Unmarshal(b, &p)
 		e.RemoveTag(p.Key, p.Idx)
 		return true, nil
+	})
+	post("/api/notes/save", func(b json.RawMessage) (any, error) {
+		var n Note
+		if err := json.Unmarshal(b, &n); err != nil {
+			return nil, err
+		}
+		return e.SaveNote(n)
+	})
+	post("/api/notes/delete", func(b json.RawMessage) (any, error) {
+		var p struct{ ID string }
+		json.Unmarshal(b, &p)
+		return e.DeleteNote(p.ID), nil
 	})
 	post("/api/speed", func(b json.RawMessage) (any, error) {
 		var p struct{ Type string }

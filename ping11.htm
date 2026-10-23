@@ -94,6 +94,47 @@
   .url-item .x{color:#576574;padding:0 4px;border-radius:4px}
   .url-item .x:hover{color:#fff;background:#e74c3c}
   .url-menu .empty{font-size:.7rem;color:#576574;padding:3px 10px 5px}
+  /* Notes (same in app/web/index.html and ping11.htm) */
+  .ibtn{display:inline-flex;align-items:center;justify-content:center;padding:5px;border-radius:6px;border:1px solid;cursor:pointer;line-height:0;transition:filter .15s}
+  .ibtn:hover{filter:brightness(1.3)}
+  .ibtn svg,.note-mark svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .tone-green{color:#8fd0a9;background:#1d3328;border-color:#2a4a39}
+  .tone-amber{color:#e3c07f;background:#3a2f1a;border-color:#54452a}
+  .tone-red{color:#eba0a0;background:#3b2224;border-color:#573134}
+  .tone-purple{color:#bfaee8;background:#2c2540;border-color:#40375e}
+  .notes-box{width:680px}
+  .notes-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .notes-head .modal-title{margin:0;flex:1}
+  .notes-search{background:#0a0e17;border:1px solid #2d3748;color:#fff;padding:4px 7px;border-radius:6px;font-size:.78rem;outline:none;width:180px;min-width:0}
+  .notes-search:focus{border-color:#4a90d9}
+  .notes-list{display:flex;flex-direction:column;gap:6px;max-height:min(62vh,540px);overflow-y:auto}
+  .note-row{display:flex;gap:10px;align-items:flex-start;padding:7px 9px;border:1px solid #2d3748;border-radius:8px;cursor:pointer}
+  .note-row:hover{background:#1e2a3a}
+  .note-main{flex:1;min-width:0}
+  .note-meta{display:flex;gap:8px;align-items:center;font-size:.68rem;color:#8395a7;margin-bottom:2px}
+  .note-tag{padding:0 6px;border-radius:3px;color:#fff;font-weight:600;font-size:.62rem;text-shadow:0 0 2px rgba(0,0,0,.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+  .note-title{font-size:.85rem;color:#fff;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .note-prev{font-size:.74rem;color:#8395a7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .note-acts{display:flex;gap:4px}
+  .notes-empty{font-size:.78rem;color:#576574;padding:18px 4px;text-align:center}
+  .note-form{flex-direction:column;gap:8px}
+  .note-form label{font-size:.65rem;color:#8395a7;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px}
+  .note-form input,.note-form textarea{width:100%;background:#0a0e17;border:1px solid #2d3748;color:#fff;padding:5px 8px;border-radius:6px;font-size:.82rem;outline:none;font-family:inherit;color-scheme:dark}
+  .note-form textarea{min-height:170px;resize:vertical;line-height:1.45}
+  .note-form input:focus,.note-form textarea:focus{border-color:#4a90d9}
+  .note-form input.bad{border-color:#e74c3c}
+  .note-form .row2{display:flex;gap:8px;flex-wrap:wrap}.note-form .row2>div{flex:1;min-width:180px}
+  .note-err{color:#eba0a0;font-size:.74rem;min-height:1em}
+  .note-btns{display:flex;gap:6px;justify-content:flex-end}
+  .tbtn{padding:5px 14px;border-radius:6px;border:1px solid;font-size:.78rem;font-weight:600;cursor:pointer}
+  .tbtn:hover{filter:brightness(1.3)}
+  .tbtn.save{color:#9db9ee;background:#202b44;border-color:#2e3d61}
+  .tbtn.cancel{color:#b0b7c8;background:#272c37;border-color:#373e4c}
+  .tbtn.del{color:#eba0a0;background:#3b2224;border-color:#573134;margin-right:auto}
+  .note-strip{position:relative;height:0;z-index:2}
+  .note-mark{position:absolute;top:1px;width:17px;height:17px;margin-left:-8px;border-radius:4px;border:1px solid #54452a;background:#3a2f1a;color:#e3c07f;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .note-mark:hover{filter:brightness(1.4)}
+  .note-mark svg{width:11px;height:11px}
 </style>
 </head>
 <body>
@@ -105,6 +146,7 @@
       <div style="display:flex;gap:6px;align-items:center">
         <button class="btn btn-toggle" id="toggleBtn" onclick="toggleMonitor()" title="Pause/Resume">⏸</button>
         <button class="btn btn-clear" onclick="clearAllData()">Clear</button>
+        <button class="ibtn tone-purple" onclick="openNotes()" title="Notes" aria-label="Notes"><svg viewBox="0 0 24 24"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/></svg></button>
         <div class="sound-toggle">
           <span class="sound-label">🔊</span>
           <button class="sound-btn active-on" id="sndOff" onclick="setSoundMode('off')">Off</button>
@@ -168,6 +210,34 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="notesModal" onclick="if(event.target===this&&noteEditId===null) closeNotes()">
+  <div class="modal-box notes-box">
+    <div id="noteListView">
+      <div class="notes-head">
+        <div class="modal-title">Notes</div>
+        <input type="search" class="notes-search" id="noteSearch" placeholder="Search" oninput="renderNoteList()">
+        <button class="ibtn tone-green" onclick="openNoteForm(null)" title="New note" aria-label="New note"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      </div>
+      <div class="notes-list" id="notesList"></div>
+    </div>
+    <div id="noteFormView" class="note-form" style="display:none">
+      <div class="modal-title" id="noteFormTitle">New note</div>
+      <div><label for="noteTitle">Title</label><input type="text" id="noteTitle" maxlength="200" dir="auto"></div>
+      <div class="row2">
+        <div><label for="noteTime">Date and time</label><input type="datetime-local" id="noteTime"></div>
+        <div><label for="noteTag">Tag</label><input type="text" id="noteTag" maxlength="100" list="noteTagList" spellcheck="false" dir="auto"><datalist id="noteTagList"></datalist></div>
+      </div>
+      <div><label for="noteBody">Text</label><textarea id="noteBody" maxlength="10000" dir="auto"></textarea></div>
+      <div class="note-err" id="noteErr"></div>
+      <div class="note-btns">
+        <button class="tbtn del" id="noteDelBtn" onclick="deleteNote(noteEditId)">Delete</button>
+        <button class="tbtn cancel" onclick="showNoteList()">Cancel</button>
+        <button class="tbtn save" onclick="saveNote()" title="Save (Ctrl+Enter)">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="stats">
   <div class="stat"><div class="label">Status</div><div class="value" id="statStatus"><span class="status-dot on"></span>Running</div></div>
   <div class="stat"><div class="label">Last RTT</div><div class="value" id="statLast">—</div></div>
@@ -181,6 +251,7 @@
 
 <div class="chart-wrap">
   <div class="tag-strip" id="tagStrip"></div>
+  <div class="note-strip" id="noteStrip"></div>
   <canvas id="chart"></canvas>
 </div>
 
@@ -227,6 +298,8 @@ const TOTAL_CANVAS_H = CHART_H + SPEED_GAP + DL_ROW_H + UL_ROW_H;
 
 // ===================== CONFIG STORAGE =====================
 const CONFIG_KEY = 'httpsmon_config';
+const NOTES_KEY = 'httpsmon_notes';
+const NOTES_MAX_AGE_DAYS = 180;
 const DEFAULT_CONFIG = {
   url: 'https://clients3.google.com/generate_204?r={rnd}',
   interval: 3,
@@ -335,7 +408,7 @@ function getAllRangeKeys() {
   const keys=[];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
-    if(k.startsWith(STORAGE_PREFIX)&&!k.startsWith(TAG_PREFIX)&&!k.startsWith(SPEED_PREFIX)&&k!==CONFIG_KEY)
+    if(k.startsWith(STORAGE_PREFIX)&&!k.startsWith(TAG_PREFIX)&&!k.startsWith(SPEED_PREFIX)&&k!==CONFIG_KEY&&k!==NOTES_KEY)
       keys.push(k.slice(STORAGE_PREFIX.length));
   }
   return keys.sort();
@@ -667,6 +740,7 @@ function getChartLayout() {
 }
 
 function renderTags() {
+  renderNoteMarks();
   const strip = document.getElementById('tagStrip');
   strip.innerHTML = '';
   if (!viewingRangeKey) return;
@@ -705,7 +779,12 @@ function populateRangeSelect() {
   const filtered = keys.filter(k => k <= currentKey);
   if (currentLiveRangeKey && !filtered.includes(currentLiveRangeKey)) { filtered.push(currentLiveRangeKey); filtered.sort(); }
   sel.innerHTML = '';
-  for (let i=filtered.length-1; i>=0; i--) { const o=document.createElement('option'); o.value=filtered[i]; o.textContent=filtered[i]; sel.appendChild(o); }
+  let grp = null; // one group per day
+  for (let i=filtered.length-1; i>=0; i--) {
+    const k = filtered[i];
+    if (!grp || grp.label !== k.slice(0, 10)) { grp = document.createElement('optgroup'); grp.label = k.slice(0, 10); sel.appendChild(grp); }
+    const o=document.createElement('option'); o.value=k; o.textContent=k; grp.appendChild(o);
+  }
   if (viewingRangeKey && filtered.includes(viewingRangeKey)) sel.value = viewingRangeKey;
   else { sel.value = currentLiveRangeKey||(filtered.length?filtered[filtered.length-1]:''); viewingRangeKey = sel.value; }
 }
@@ -758,6 +837,8 @@ function drawChart() {
   for(let t=firstTick;t<=tEnd.getTime();t+=xInt){const x=pad.left+((t-tStart.getTime())/RANGE_MS)*cw;ctx.beginPath();ctx.moveTo(x,pad.top);ctx.lineTo(x,pad.top+ch);ctx.stroke();ctx.fillText(fmtTime(new Date(t)),x,pad.top+ch+4);}
   ctx.fillStyle='#8395a7';ctx.font='11px system-ui';ctx.textAlign='center';
   ctx.save();ctx.translate(12,pad.top+ch/2);ctx.rotate(-Math.PI/2);ctx.fillText('Response Time',0,0);ctx.restore();
+
+  drawNoteLines(t=>pad.left+((t-tStart.getTime())/RANGE_MS)*cw, pad.top, pad.top+ch);
 
   // Data
   if(viewingData.length){
@@ -996,12 +1077,197 @@ function toggleMonitor(){
   else{running=true;document.getElementById('toggleBtn').textContent='⏸';document.getElementById('toggleBtn').title='Pause';document.getElementById('statStatus').innerHTML='<span class="status-dot on"></span>Running';log('Monitor resumed');tick();}
 }
 function clearAllData(){
-  if(!confirm('Clear ALL stored monitoring data, tags, and speed results? This cannot be undone.'))return;
-  const toRemove=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith(STORAGE_PREFIX)||k.startsWith(TAG_PREFIX)||k.startsWith(SPEED_PREFIX))toRemove.push(k);}
+  if(!confirm('Clear ALL stored monitoring data, tags, and speed results? Notes are kept. This cannot be undone.'))return;
+  const toRemove=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k!==NOTES_KEY&&(k.startsWith(STORAGE_PREFIX)||k.startsWith(TAG_PREFIX)||k.startsWith(SPEED_PREFIX)))toRemove.push(k);}
   toRemove.forEach(k=>localStorage.removeItem(k));
   viewingData=[];viewingRangeKey=currentLiveRangeKey;populateRangeSelect();
   document.getElementById('rangeSelect').value=currentLiveRangeKey;
   updateStatsFromViewing();drawChart();renderTags();document.getElementById('log').innerHTML='';log('All data cleared');
+}
+
+// ===================== NOTES BACKEND (browser) =====================
+// Notes are saved in localStorage (NOTES_KEY). They are small, so they are kept
+// NOTES_MAX_AGE_DAYS (longer than the chart data).
+const notesBackend = {
+  async load() {
+    try { notes = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]'); } catch (e) { notes = []; }
+    if (!Array.isArray(notes)) notes = [];
+    const cut = Date.now() - NOTES_MAX_AGE_DAYS * 86400000;
+    const kept = notes.filter(n => n.time >= cut);
+    if (kept.length !== notes.length) { notes = kept; this.write(); }
+    notesChanged();
+  },
+  write() {
+    const s = JSON.stringify(notes);
+    try { localStorage.setItem(NOTES_KEY, s); return ''; } catch (e) {}
+    purgeOld();
+    try { localStorage.setItem(NOTES_KEY, s); return ''; } catch (e) { return 'Browser storage is full: ' + e.message; }
+  },
+  async latestTag() {
+    const keys = getAllRangeKeys();
+    for (let i = keys.length - 1; i >= 0; i--) { const t = loadTags(keys[i]); if (t.length) return t[t.length - 1].text; }
+    return '';
+  },
+  async save(n) {
+    if (n.time < Date.now() - NOTES_MAX_AGE_DAYS * 86400000) return 'Date is older than ' + NOTES_MAX_AGE_DAYS + ' days (it would be deleted)';
+    n.body = n.body.replace(/\s+$/, '');
+    const now = Date.now(), old = notes.slice();
+    if (!n.id) {
+      n.id = now.toString(36) + Math.random().toString(36).slice(2, 8);
+      n.created = n.updated = now;
+      notes.push(n);
+    } else {
+      const i = notes.findIndex(x => x.id === n.id);
+      if (i < 0) return 'Note not found (deleted?)';
+      n.created = notes[i].created; n.updated = now;
+      notes[i] = n;
+    }
+    const err = this.write();
+    if (err) { notes = old; return err; }
+    notesChanged();
+    return '';
+  },
+  async del(id) {
+    const old = notes.slice();
+    notes = notes.filter(x => x.id !== id);
+    const err = this.write();
+    if (err) { notes = old; return err; }
+    notesChanged();
+    return '';
+  }
+};
+
+// ===================== NOTES =====================
+// The same code is in app/web/index.html and ping11.htm. Only notesBackend
+// (defined above) is different: the app saves notes in netmon, the browser
+// version in localStorage.
+let notes = [];        // newest first
+let noteEditId = null; // null = the list is shown, '' = new note, else the ID of the edited note
+const NOTE_SVG = '<svg viewBox="0 0 24 24"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/></svg>';
+const PENCIL_SVG = '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const TRASH_SVG = '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+const noteEl = id => document.getElementById(id);
+function noteEsc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Same color as the tag bars for the same text.
+function noteTagColor(text) {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) - h + text.charCodeAt(i)) | 0;
+  const hue = ((h % 360) + 360) % 360;
+  return 'hsla(' + (hue >= 20 && hue <= 40 ? hue + 40 : hue) + ',65%,50%,0.5)';
+}
+function fmtNoteTime(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+function notesChanged() {
+  notes.sort((a, b) => b.time - a.time || b.updated - a.updated);
+  if (noteEditId === null) renderNoteList();
+  renderNoteMarks(); drawChart();
+}
+
+function openNotes() { showNoteList(); noteEl('notesModal').classList.add('open'); }
+function closeNotes() { noteEl('notesModal').classList.remove('open'); noteEditId = null; }
+function showNoteList() {
+  noteEditId = null;
+  noteEl('noteFormView').style.display = 'none';
+  noteEl('noteListView').style.display = '';
+  renderNoteList();
+}
+function renderNoteList() {
+  const box = noteEl('notesList');
+  const q = noteEl('noteSearch').value.trim().toLowerCase();
+  const list = q ? notes.filter(n => (n.title + '\n' + n.tag + '\n' + n.body).toLowerCase().includes(q)) : notes;
+  if (!list.length) {
+    box.innerHTML = '<div class="notes-empty">' + (notes.length ? 'No note matches the search.' : 'No notes yet. Click + to write one.') + '</div>';
+    return;
+  }
+  box.innerHTML = list.map(n => '<div class="note-row" data-id="' + noteEsc(n.id) + '">'
+    + '<div class="note-main"><div class="note-meta"><span>' + fmtNoteTime(n.time) + '</span>'
+    + (n.tag ? '<span class="note-tag" style="background:' + noteTagColor(n.tag) + '">' + noteEsc(n.tag) + '</span>' : '')
+    + '</div><div class="note-title" dir="auto">' + noteEsc(n.title) + '</div>'
+    + (n.body ? '<div class="note-prev" dir="auto">' + noteEsc(n.body.replace(/\s+/g, ' ')) + '</div>' : '')
+    + '</div><div class="note-acts">'
+    + '<button class="ibtn tone-amber" title="Edit note" aria-label="Edit note">' + PENCIL_SVG + '</button>'
+    + '<button class="ibtn tone-red" data-del title="Delete note" aria-label="Delete note">' + TRASH_SVG + '</button>'
+    + '</div></div>').join('');
+}
+noteEl('notesList').addEventListener('click', e => {
+  const row = e.target.closest('.note-row');
+  if (!row) return;
+  if (e.target.closest('[data-del]')) deleteNote(row.dataset.id); else openNoteForm(row.dataset.id);
+});
+
+async function openNoteForm(id) {
+  const n = id ? notes.find(x => x.id === id) : null;
+  if (id && !n) return;
+  noteEditId = n ? n.id : '';
+  noteEl('noteFormTitle').textContent = n ? 'Edit note' : 'New note';
+  noteEl('noteTitle').value = n ? n.title : '';
+  noteEl('noteTime').value = fmtNoteTime(n ? n.time : Date.now()).replace(' ', 'T');
+  noteEl('noteTag').value = n ? n.tag : '';
+  noteEl('noteBody').value = n ? n.body : '';
+  noteEl('noteErr').textContent = '';
+  noteEl('noteTitle').classList.remove('bad'); noteEl('noteTime').classList.remove('bad');
+  noteEl('noteDelBtn').style.display = n ? '' : 'none';
+  noteEl('noteListView').style.display = 'none';
+  noteEl('noteFormView').style.display = 'flex';
+  noteEl('notesModal').classList.add('open');
+  noteEl('noteTitle').focus();
+  // Tag: a new note gets the latest tag; the list offers it and the tags of other notes.
+  const latest = await notesBackend.latestTag();
+  const tags = [...new Set([latest].concat(notes.map(x => x.tag)).filter(Boolean))].slice(0, 30);
+  noteEl('noteTagList').innerHTML = tags.map(t => '<option value="' + noteEsc(t) + '">').join('');
+  if (!n && noteEditId === '' && !noteEl('noteTag').value) noteEl('noteTag').value = latest;
+}
+async function saveNote() {
+  const title = noteEl('noteTitle').value.trim();
+  const time = new Date(noteEl('noteTime').value).getTime(); // "YYYY-MM-DDTHH:mm" = local time
+  noteEl('noteTitle').classList.toggle('bad', !title);
+  noteEl('noteTime').classList.toggle('bad', isNaN(time));
+  if (!title || isNaN(time)) { noteEl('noteErr').textContent = !title ? 'Please write a title.' : 'Please set the date and time.'; return; }
+  const err = await notesBackend.save({id: noteEditId, title: title, time: time, tag: noteEl('noteTag').value.trim(), body: noteEl('noteBody').value});
+  if (err) { noteEl('noteErr').textContent = err; return; }
+  showNoteList();
+}
+async function deleteNote(id) {
+  const n = notes.find(x => x.id === id);
+  if (!n || !confirm('Delete the note "' + n.title + '"? This cannot be undone.')) return;
+  const err = await notesBackend.del(id);
+  if (err) { alert(err); return; }
+  if (noteEditId !== null) showNoteList();
+}
+document.addEventListener('keydown', e => {
+  if (!noteEl('notesModal').classList.contains('open')) return;
+  if (e.key === 'Escape') { if (noteEditId !== null) showNoteList(); else closeNotes(); }
+  else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && noteEditId !== null) { e.preventDefault(); saveNote(); }
+});
+
+// ---- notes on the chart: a small icon above the chart and a dashed line ----
+function notesInView() {
+  if (!viewingRangeKey) return [];
+  const t0 = rangeKeyToStartDate(viewingRangeKey).getTime();
+  return notes.filter(n => n.time >= t0 && n.time < t0 + RANGE_MS);
+}
+function renderNoteMarks() {
+  const strip = noteEl('noteStrip');
+  strip.innerHTML = '';
+  if (!viewingRangeKey) return;
+  const t0 = rangeKeyToStartDate(viewingRangeKey).getTime(), layout = getChartLayout();
+  for (const n of notesInView()) {
+    const el = document.createElement('div');
+    el.className = 'note-mark';
+    el.style.left = (layout.padLeft + (n.time - t0) / RANGE_MS * layout.cw) + 'px';
+    el.innerHTML = NOTE_SVG;
+    el.title = fmtNoteTime(n.time) + ' — ' + n.title + (n.tag ? ' [' + n.tag + ']' : '') + '\n(click to open)';
+    el.onclick = () => openNoteForm(n.id);
+    strip.appendChild(el);
+  }
+}
+function drawNoteLines(X, top, bottom) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(227,192,127,0.45)'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+  for (const n of notesInView()) { const x = Math.round(X(n.time)) + 0.5; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); }
+  ctx.restore();
 }
 
 // ===================== INIT =====================
@@ -1024,6 +1290,7 @@ function init(){
     loadViewingData();updateStatsFromViewing();resizeCanvas();resizeLog();
     log('Monitor started — target: '+document.getElementById('urlInput').value);
     tick(); scheduleDL(); scheduleUL();
+    notesBackend.load();
     updateExitIpUI(); fetchExitIp(); setInterval(fetchExitIp, IP_FETCH_INTERVAL_MS);
   } catch(e) {
     try { localStorage.removeItem(CONFIG_KEY); } catch(e2) {}

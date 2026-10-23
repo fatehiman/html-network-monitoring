@@ -11,9 +11,12 @@ import (
 )
 
 const (
-	rangeDur   = 2 * time.Hour
-	maxAgeDays = 10
-	maxRanges  = 120
+	rangeDur = 2 * time.Hour
+	// keepDays: ranges (points, tags, speed) and notes older than this are deleted.
+	// One full range is about 50 KB, so 180 days is about 100 MB. Only one range
+	// is loaded at a time, so this does not make the program slower.
+	keepDays  = 180
+	maxRanges = keepDays * 12
 )
 
 // Point is one probe result. MS == nil means failure/timeout.
@@ -156,7 +159,7 @@ func (s *Store) Starts() []time.Time {
 func (s *Store) Delete(start time.Time) { os.Remove(s.file(start)) }
 
 func (s *Store) Purge() {
-	cut := time.Now().Add(-maxAgeDays * 24 * time.Hour)
+	cut := time.Now().Add(-keepDays * 24 * time.Hour)
 	var keep []time.Time
 	for _, t := range s.Starts() {
 		if t.Before(cut) {

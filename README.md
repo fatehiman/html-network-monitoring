@@ -10,6 +10,7 @@ There are two versions:
 | Keeps measuring when the window is hidden / minimized / closed | **Yes** — measuring runs in the program, not in the page | No — browsers slow down and then stop timers in hidden tabs |
 | Speed test server | Nearest **Ookla** (speedtest.net) server, or Cloudflare | Cloudflare only (Ookla servers block browser requests with CORS) |
 | Data saved in | Files in a data folder | Browser `localStorage` |
+| Data kept for | 180 days (chart and notes) | 10 days chart, 180 days notes (`localStorage` is only about 5 MB) |
 | Works on a Linux server with no screen | Yes | No |
 
 Older browser versions (`ping7.htm` … `ping10.htm`) are kept for reference.
@@ -131,10 +132,13 @@ In the data folder:
 
 - `config.json` — target URL, intervals, speed server, your saved URLs, sound mode, auto-tag-by-IP checkbox, exit-IP check endpoint and your saved endpoints
 - `ranges/YYYYMMDD-HH.json` — one file per 2-hour range: `{"points": [[timestampMs, ms|null], …], "tags": […], "speed": […]}`
+- `notes.json` — your notes: `[{id, title, time, tag, body, created, updated}, …]` (times in ms)
 - `geoip.json` — Windows only: cache of exit-IP locations for the tray tooltip (`{"<ip>": {"text": "…", "at": timestampMs}}`, 10 days, max 50 IPs)
 - `netmon.lock` — single-instance lock
 
-Ranges older than 10 days are deleted; at most 120 ranges are kept.
+**Cleanup:** ranges (points, tags, speed results) and notes older than **180 days** are deleted, at start and every 2 hours. At most 2160 ranges (180 days × 12) are kept. A note's age comes from its own date-time.
+
+**Size:** one full range is about 50 KB (3 s interval), so 180 days is about 100 MB. This does not make netmon slower: it loads only one range at a time (the one you look at), and writes only the live range.
 
 ### API
 
@@ -142,7 +146,7 @@ Ranges older than 10 days are deleted; at most 120 ranges are kept.
 |---|---|---|---|
 | GET | `/api/state` | | config, presets, running, live range key, range list, last 200 log lines |
 | GET | `/api/range?key=2026/03/06 00:00-02:00` | | points, tags, speed results of one range |
-| GET | `/api/events` | | Server-Sent Events: `probe`, `point`, `range`, `log`, `tags`, `speed`, `speedstate`, `speedprogress`, `config`, `running`, `cleared`, `ip` |
+| GET | `/api/events` | | Server-Sent Events: `probe`, `point`, `range`, `log`, `tags`, `speed`, `speedstate`, `speedprogress`, `config`, `running`, `cleared`, `ip`, `notes` |
 | POST | `/api/config` | any of `url`, `interval`, `dlInterval`, `ulInterval`, `speedServer`, `soundMode`, `autoTagIp`, `ipUrl` | new config |
 | POST | `/api/urls/add` / `/api/urls/remove` | `{"url": "…"}` | new config |
 | POST | `/api/ipurls/add` / `/api/ipurls/remove` | `{"url": "…"}` | new config |
@@ -150,7 +154,10 @@ Ranges older than 10 days are deleted; at most 120 ranges are kept.
 | POST | `/api/tag` | `{"text": "4G"}` | |
 | POST | `/api/tag/delete` | `{"key": "…", "idx": 0}` | |
 | POST | `/api/speed` | `{"type": "dl"}` or `"ul"` | `false` if that test is already queued |
-| POST | `/api/clear` | | deletes all data |
+| POST | `/api/clear` | | deletes all data except notes |
+| GET | `/api/notes` | | `{notes: […], latestTag: "…"}`, notes newest first |
+| POST | `/api/notes/save` | `{id, title, time, tag, body}` (`id` empty = new note) | all notes, newest first |
+| POST | `/api/notes/delete` | `{"id": "…"}` | all notes, newest first |
 
 ### Build from source
 
@@ -173,6 +180,7 @@ Source files in `app/`:
 | `main.go` | flags, single instance, free port, HTTP server |
 | `engine.go` | probe loop, ranges, tags, events |
 | `speed.go` | speed tests |
+| `notes.go` | notes (save, delete, cleanup, latest tag) |
 | `store.go` | data files |
 | `config.go` | config and URL presets |
 | `tray_windows.go` | Windows tray, beeps, message box, lock |
@@ -261,11 +269,28 @@ How it works now:
 
 **Scheduled tests:** set minutes in the box next to ⬇DL / ⬆UL (0 = off).
 
-### 6. Other controls
+### 6. Notes
+
+Click the **note** button (next to **Clear**) to open the Notes window.
+
+- The list shows every note, **newest first** (by the note's date-time). Type in **Search** to filter by title, tag or text.
+- **+** writes a new note. Each note has:
+  - **Title** (required)
+  - **Date and time** — now by default, you can change it
+  - **Tag** — the latest network tag by default, you can change it. The field suggests the latest tag and the tags of your other notes.
+  - **Text**
+- Click a note (or the pencil) to edit it; the trash button deletes it (with confirm). `Ctrl+Enter` saves, `Esc` goes back.
+- **On the chart:** a small note icon above the chart and a dashed line show where each note is. Hover to see the title, click to open it.
+- Title and text can be in any language (right-to-left text such as Persian is shown correctly).
+- **Clear** does not delete notes.
+- App: saved in `notes.json` in the data folder (not in the browser), and every open UI tab is updated live. Browser version: saved in `localStorage` (`httpsmon_notes`).
+- Notes older than 180 days are deleted. A date older than 180 days cannot be saved.
+
+### 7. Other controls
 
 - **⏸ / ▶** pauses or resumes the ping loop (speed tests are independent).
-- **Clear** (with confirm) deletes all data, tags and speed results.
-- **Range** list shows every 2-hour range that has data. When the live range ends and you are looking at it, the view moves to the new range.
+- **Clear** (with confirm) deletes all data, tags and speed results. Notes are kept.
+- **Range** list shows every 2-hour range that has data, grouped by day, newest first. When the live range ends and you are looking at it, the view moves to the new range.
 
 ---
 
@@ -288,9 +313,11 @@ How it works now:
 | `httpsmon_` | `httpsmon_2026/03/06 00:00-02:00` | `[[timestamp, ms\|null], ...]` | Ping points. `null` = failed |
 | `httpsmon_tags_` | `httpsmon_tags_2026/03/06 00:00-02:00` | `[{text, color, start, end}, ...]` | Tags of the range |
 | `httpsmon_speed_` | `httpsmon_speed_2026/03/06 00:00-02:00` | `[{time, type, mbps}, ...]` | Speed results (`type`: `"dl"` / `"ul"`) |
+| `httpsmon_notes` | `httpsmon_notes` | `[{id, title, time, tag, body, created, updated}, ...]` | Notes (kept 180 days) |
 | `httpsmon_config` | `httpsmon_config` | `{url, interval, dlInterval, ulInterval, userUrls, autoTagIp, ipUrl, ipUrlList}` | Saved config |
 
-- Ranges older than 10 days are purged; at most 120 ranges are kept.
+- Ranges older than 10 days are purged; at most 120 ranges are kept. (Browsers allow only about 5 MB of `localStorage`, which is about 9 days of chart data. Use the netmon app to keep 180 days.)
+- Notes older than 180 days are purged when the page opens.
 - If storage is full, old data is purged before saving config.
 - Config is applied **before** event listeners are attached, to avoid save-on-apply loops.
 
@@ -298,13 +325,13 @@ How it works now:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ 📡 HTTPS Response Time Monitor [⏸] [Clear] 🔊[Off|On|Err] [Range ▼]│
+│ 📡 HTTPS Response Time Monitor [⏸] [Clear] [📝] 🔊[Off|On|Err] [Range ▼]│
 │ [URL input][+][▾] [Interval]        [☐ Auto tag (IP)] [Tag: ___ ⏎] │
 │                               [Server ▼][⬇DL][_]min [⬆UL][_]min │
 ├──────────────────────────────────────────────────────────────────┤
 │ Status | Last | Average | Min | Max | Requests | Failures | Jitter│
 ├──────────────────────────────────────────────────────────────────┤
-│ [Tag strip]                                                      │
+│ [Tag strip]  📝 = note markers                                   │
 │ Main chart (Y: 0–5000 ms, X: 2 h range)                          │
 │ DL:  45    62    58                                              │
 │ UL:  12    15    11                                              │

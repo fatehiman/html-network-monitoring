@@ -36,6 +36,7 @@ type Engine struct {
 	liveStart time.Time
 	live      *RangeData
 	logs      []LogEntry
+	notes     []Note
 	subs      map[chan []byte]struct{}
 	wake      chan struct{}
 
@@ -68,6 +69,7 @@ func newEngine(dataDir string) (*Engine, error) {
 		dataDir:    dataDir,
 		store:      st,
 		cfg:        loadConfig(dataDir),
+		notes:      loadNotes(dataDir),
 		running:    true,
 		subs:       map[chan []byte]struct{}{},
 		wake:       make(chan struct{}, 1),
@@ -89,6 +91,7 @@ func newEngine(dataDir string) (*Engine, error) {
 		ipifyWake:   make(chan struct{}, 1),
 	}
 	st.Purge()
+	e.purgeNotesLocked()
 	e.liveStart = rangeStart(time.Now())
 	e.live = st.Load(e.liveStart)
 	return e, nil
@@ -635,6 +638,7 @@ func (e *Engine) rolloverLocked(now time.Time) {
 	e.liveStart, e.live = rs, next
 	e.saveLiveLocked()
 	e.store.Purge()
+	e.purgeNotesLocked()
 	e.publishLocked("range", map[string]any{"prev": prevKey, "live": rangeKey(rs), "ranges": e.rangeKeysLocked()})
 }
 
